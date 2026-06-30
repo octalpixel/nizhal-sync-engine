@@ -455,18 +455,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function encodeCursor(version: bigint): Cursor {
-  return btoa(version.toString()).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+// The cursor is a position in the total order (_nizhal_row_version, id). _nizhal_row_version is the
+// writing transaction's xid8 (lock-free), so rows of one transaction tie on it — the id breaks the
+// tie. Encoding both keeps pagination exact across tied rows.
+interface CursorPosition {
+  seq: bigint;
+  id: string;
 }
 
-function decodeCursor(cursor: Cursor): bigint | null {
-  if (cursor === INITIAL_CURSOR) return 0n;
+const INITIAL_POSITION: CursorPosition = { seq: 0n, id: "" };
+
+function encodeCursor(position: CursorPosition): Cursor {
+  return Buffer.from(`${position.seq.toString()} ${position.id}`, "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: Cursor): CursorPosition | null {
+  if (cursor === INITIAL_CURSOR) return { ...INITIAL_POSITION };
   try {
-    const base64 = cursor.replaceAll("-", "+").replaceAll("_", "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const decoded = atob(padded);
-    if (!/^(0|[1-9][0-9]*)$/.test(decoded)) return null;
-    return BigInt(decoded);
+    const raw = Buffer.from(cursor, "base64url").toString("utf8");
+    const sep = raw.indexOf(" ");
+    if (sep === -1) return null;
+    const seq = raw.slice(0, sep);
+    if (!/^(0|[1-9][0-9]*)$/.test(seq)) return null;
+    return { seq: BigInt(seq), id: raw.slice(sep + 1) };
   } catch {
     return null;
   }
@@ -475,16 +486,22 @@ function decodeCursor(cursor: Cursor): bigint | null {
 async function normalizePullCursor(
   db: NizhalDb,
   cursor: Cursor,
-): Promise<{ effective: bigint; reset: boolean }> {
-  const decoded = decodeCursor(cursor);
-  if (decoded === null) return { effective: 0n, reset: true };
-  const rows = await executeRows<{ last_value: unknown }>(
+): Promise<{ effective: CursorPosition; horizon: bigint; reset: boolean }> {
+  // The settled-prefix horizon: every transaction with xid < horizon is committed-or-aborted, and no
+  // future write can ever be assigned an xid below it. Advancing the cursor only up to here makes the
+  // out-of-order-commit skip structurally impossible (see _nizhal_next_row_version).
+  const horizonRows = await executeRows<{ horizon: unknown }>(
     db,
-    sql`select last_value from _nizhal_row_version_seq`,
+    sql`select pg_snapshot_xmin(pg_current_snapshot())::text as horizon`,
   );
-  const highWatermark = bigintValue(rows[0]?.last_value) ?? 0n;
-  if (decoded > highWatermark) return { effective: 0n, reset: true };
-  return { effective: decoded, reset: false };
+  const horizon = bigintValue(horizonRows[0]?.horizon) ?? 0n;
+  const decoded = decodeCursor(cursor);
+  // null = unparseable/legacy cursor; seq beyond the horizon = corrupt (a valid cursor only ever
+  // advances over delivered rows, which are all below a past horizon). Either way, re-bootstrap.
+  if (decoded === null || decoded.seq > horizon) {
+    return { effective: { ...INITIAL_POSITION }, horizon, reset: true };
+  }
+  return { effective: decoded, horizon, reset: false };
 }
 
 async function getPostgresChanges(
@@ -499,6 +516,7 @@ async function getPostgresChanges(
 ): Promise<PullResult> {
   const normalized = await normalizePullCursor(db, input.cursor);
   let cursor = normalized.effective;
+  const horizon = normalized.horizon;
   let cursorReset = normalized.reset;
   const syncedTables = collectSyncRuleTables(input.syncRules);
   const bucketRows = await resolveActorBucketRows(db, input.actor, input.syncRules);
@@ -517,7 +535,7 @@ async function getPostgresChanges(
     if (storedBuckets.length > 0) {
       const known = new Set(storedBuckets.map(String));
       if (bucketKeys.some((key) => !known.has(String(key)))) {
-        cursor = 0n;
+        cursor = { ...INITIAL_POSITION };
         cursorReset = true;
       }
     }
@@ -533,7 +551,7 @@ async function getPostgresChanges(
       if (rows.length === 0) continue;
       const queryRows = await executeRows<Record<string, unknown>>(
         db,
-        buildDataQuery(query, rows, cursor),
+        buildDataQuery(query, rows, cursor, horizon),
       );
       for (const row of queryRows) {
         const rowKey = rowIdentity(query.table, row);
@@ -546,7 +564,7 @@ async function getPostgresChanges(
     }
   }
 
-  candidates.push(...(await getRemovalCandidates(db, cursor, bucketKeys)));
+  candidates.push(...(await getRemovalCandidates(db, cursor, horizon, bucketKeys)));
   const visibleRemovalRows = await getVisibleRemovalRows(db, bucketRows, candidates);
   const scopedCandidates = candidates.filter(
     (candidate) =>
@@ -562,9 +580,9 @@ async function getPostgresChanges(
   const changed = new Map<string, Record<string, unknown>[]>();
   const tombstoned: PullResult["tombstoned"] = [];
   const removed: NonNullable<PullResult["removed"]> = [];
-  let nextVersion = cursor;
+  let nextPosition = cursor;
   for (const candidate of page) {
-    nextVersion = candidate.version;
+    nextPosition = { seq: candidate.version, id: candidateSortId(candidate) };
     if (candidate.type === "change") {
       const tableRows = changed.get(candidate.table) ?? [];
       tableRows.push(candidate.row);
@@ -580,7 +598,7 @@ async function getPostgresChanges(
     else removed.push(removal);
   }
 
-  const nextCursor = encodeCursor(nextVersion);
+  const nextCursor = encodeCursor(nextPosition);
   const removedBuckets = await reconcileClientBuckets(db, {
     actor: input.actor,
     deviceId: input.deviceId,
@@ -677,19 +695,26 @@ function buildMembershipParameterQuery(
 function buildDataQuery(
   query: Query,
   bucketRows: readonly Record<string, unknown>[],
-  cursor: bigint,
+  cursor: CursorPosition,
+  horizon: bigint,
 ): ReturnType<typeof sql> {
   const source = query.raw
     ? sql`(${sql.raw(query.raw)}) as ${sql.identifier("_nizhal_source")}`
     : sql.identifier(query.table);
+  const version = sql.identifier("_nizhal_row_version");
+  const id = sql.identifier("id");
+  const seq = cursor.seq.toString();
   const conditions = [
-    sql`${sql.identifier("_nizhal_row_version")} > ${cursor.toString()}::bigint`,
+    // strictly after the (seq, id) frontier (rows of one txn tie on seq → id breaks the tie)…
+    sql`(${version} > ${seq}::xid8 or (${version} = ${seq}::xid8 and ${id}::text > ${cursor.id}))`,
+    // …and strictly below the settled-prefix horizon, so an in-flight txn's rows are never crossed.
+    sql`${version} < ${horizon.toString()}::xid8`,
     sql`${sql.identifier("deleted_at")} is null`,
     buildBucketScope(query, bucketRows),
   ];
   return sql`select * from ${source}
 where ${sql.join(conditions, sql` and `)}
-order by ${sql.identifier("_nizhal_row_version")} asc`;
+order by ${version} asc, ${id}::text asc`;
 }
 
 function buildBucketScope(
@@ -769,10 +794,12 @@ type PullCandidate =
 
 async function getRemovalCandidates(
   db: NizhalDb,
-  cursor: bigint,
+  cursor: CursorPosition,
+  horizon: bigint,
   bucketKeys: readonly string[],
 ): Promise<PullCandidate[]> {
   if (bucketKeys.length === 0) return [];
+  const seq = cursor.seq.toString();
   const rows = await db
     .select({
       tableName: nizhalTombstones.tableName,
@@ -783,12 +810,12 @@ async function getRemovalCandidates(
     })
     .from(nizhalTombstones)
     .where(
-      sql`${nizhalTombstones.rowVersion} > ${cursor.toString()}::bigint and ${inArray(
+      sql`(${nizhalTombstones.rowVersion} > ${seq}::xid8 or (${nizhalTombstones.rowVersion} = ${seq}::xid8 and ${nizhalTombstones.rowId} > ${cursor.id})) and ${nizhalTombstones.rowVersion} < ${horizon.toString()}::xid8 and ${inArray(
         nizhalTombstones.bucketKey,
         [...bucketKeys],
       )}`,
     )
-    .orderBy(asc(nizhalTombstones.rowVersion));
+    .orderBy(asc(nizhalTombstones.rowVersion), asc(nizhalTombstones.rowId));
   const removals: PullCandidate[] = [];
   for (const row of rows) {
     removals.push({
@@ -882,12 +909,12 @@ async function reconcileClientBuckets(
       .values({
         clientId: storageClientId,
         bucketKey: bucket,
-        lastSeenCursor: decodeCursor(input.cursor) ?? 0n,
+        lastSeenCursor: decodeCursor(input.cursor)?.seq ?? 0n,
       })
       .onConflictDoUpdate({
         target: [nizhalClientBuckets.clientId, nizhalClientBuckets.bucketKey],
         set: {
-          lastSeenCursor: decodeCursor(input.cursor) ?? 0n,
+          lastSeenCursor: decodeCursor(input.cursor)?.seq ?? 0n,
           updatedAt: sql`now()`,
         },
       });
@@ -913,9 +940,20 @@ function rowIdentity(table: string, row: Record<string, unknown>): string {
   return `${table}:${row.id === undefined || row.id === null ? JSON.stringify(row) : String(row.id)}`;
 }
 
+// The id used to break ties within one transaction's rows (same xid8). MUST stay consistent with the
+// SQL frontier/order-by (`id::text` / `row_id`) or paging could skip or duplicate a tied row.
+function candidateSortId(candidate: PullCandidate): string {
+  if (candidate.type !== "change") return candidate.id;
+  const id = candidate.row.id;
+  return id === undefined || id === null ? "" : String(id);
+}
+
 function compareCandidates(left: PullCandidate, right: PullCandidate): number {
-  if (left.version === right.version) return 0;
-  return left.version < right.version ? -1 : 1;
+  if (left.version !== right.version) return left.version < right.version ? -1 : 1;
+  const leftId = candidateSortId(left);
+  const rightId = candidateSortId(right);
+  if (leftId === rightId) return 0;
+  return leftId < rightId ? -1 : 1;
 }
 
 function bigintValue(value: unknown): bigint | null {
@@ -1000,7 +1038,7 @@ export function buildPostgresProvisionPlan(input: {
 function auditStatements(): string[] {
   return [
     `create table if not exists _nizhal_audit_log (
-  row_version bigint primary key default _nizhal_next_row_version(),
+  row_version xid8 primary key default _nizhal_next_row_version(),
   client_mutation_id text not null,
   mutation_name text not null,
   args jsonb not null,
@@ -1066,27 +1104,22 @@ function engineStatements(): string[] {
   updated_at timestamptz not null default now(),
   constraint _nizhal_sync_control_singleton check (id)
 )`,
-    "create sequence if not exists _nizhal_row_version_seq",
     "insert into _nizhal_sync_control (id) values (true) on conflict (id) do nothing",
+    // Lock-free, commit-ordered watermark: the writing transaction's monotonic 64-bit id. Replaces a
+    // singleton FOR UPDATE (which serialized ALL writes to force assignment-order == commit-order).
+    // Readers stay no-skip by only advancing their cursor to pg_snapshot_xmin (the settled-prefix
+    // horizon) — see getPostgresChanges. Rows of one transaction share its id (tiebreak by pk/id).
     `create or replace function _nizhal_next_row_version()
-returns bigint
-language plpgsql
-as $$
-declare
-  version bigint;
-begin
-  perform 1 from _nizhal_sync_control where id = true for update;
-  version := nextval('_nizhal_row_version_seq');
-  return version;
-end;
-$$`,
+returns xid8
+language sql
+as $$ select pg_current_xact_id() $$`,
     `create table if not exists _nizhal_tombstones (
   table_name text not null,
   row_id text not null,
   client_key text not null,
   bucket_key text not null,
   kind text not null default 'tombstone',
-  row_version bigint not null default _nizhal_next_row_version(),
+  row_version xid8 not null default _nizhal_next_row_version(),
   deleted_at timestamptz not null default now(),
   primary key (table_name, row_id, bucket_key, row_version)
 )`,
@@ -1094,11 +1127,12 @@ $$`,
     "update _nizhal_tombstones set client_key = row_id where client_key is null",
     "alter table _nizhal_tombstones alter column client_key set not null",
     "alter table _nizhal_tombstones add column if not exists kind text not null default 'tombstone'",
-    "alter table _nizhal_tombstones add column if not exists row_version bigint",
+    "alter table _nizhal_tombstones add column if not exists row_version xid8",
     "alter table _nizhal_tombstones alter column row_version set default _nizhal_next_row_version()",
     "update _nizhal_tombstones set row_version = _nizhal_next_row_version() where row_version is null",
     "alter table _nizhal_tombstones alter column row_version set not null",
-    "create unique index if not exists _nizhal_tombstones_row_version_idx on _nizhal_tombstones (row_version)",
+    // non-unique: rows of one transaction share its xid (no longer a globally-unique sequence).
+    "create index if not exists _nizhal_tombstones_row_version_idx on _nizhal_tombstones (row_version)",
     `create table if not exists _nizhal_client_buckets (
   client_id text not null,
   bucket_key text not null,
@@ -1138,7 +1172,7 @@ function tableStatements(table: SyncedTablePlan): string[] {
   return [
     `alter table ${tableNameSql} add column if not exists updated_at timestamptz not null default now()`,
     `alter table ${tableNameSql} add column if not exists deleted_at timestamptz`,
-    `alter table ${tableNameSql} add column if not exists _nizhal_row_version bigint not null default _nizhal_next_row_version()`,
+    `alter table ${tableNameSql} add column if not exists _nizhal_row_version xid8 not null default _nizhal_next_row_version()`,
     `alter table ${tableNameSql} alter column _nizhal_row_version set default _nizhal_next_row_version()`,
     ...(table.merge === "field"
       ? [

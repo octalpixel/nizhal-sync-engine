@@ -726,7 +726,7 @@ describe("sync core", () => {
       postJson(server.app, "/sync/push", { mutations: [firstMutation] }),
       postJson(server.app, "/sync/push", { mutations: [firstMutation] }),
     ]);
-    const inserted = await db.query<{ client_id: string; _nizhal_row_version: number }>(
+    const inserted = await db.query<{ client_id: string; _nizhal_row_version: string }>(
       "select client_id, _nizhal_row_version from notes",
     );
 
@@ -741,7 +741,7 @@ describe("sync core", () => {
         ),
       ],
     });
-    const updated = await db.query<{ body: string; _nizhal_row_version: number }>(
+    const updated = await db.query<{ body: string; _nizhal_row_version: string }>(
       "select body, _nizhal_row_version from notes where client_id = $1",
       ["dup-note"],
     );
@@ -756,8 +756,10 @@ describe("sync core", () => {
     expect(update.status).toBe(200);
     expect(inserted.rows).toHaveLength(1);
     expect(updated.rows).toEqual([expect.objectContaining({ body: "second" })]);
-    expect(updated.rows[0]?._nizhal_row_version).toBeGreaterThan(
-      inserted.rows[0]?._nizhal_row_version ?? 0,
+    // _nizhal_row_version is now xid8 (serializes as a numeric string): the update's transaction id
+    // is strictly greater than the insert's. Compare as BigInt — monotonic per the commit order.
+    expect(BigInt(updated.rows[0]?._nizhal_row_version ?? "0")).toBeGreaterThan(
+      BigInt(inserted.rows[0]?._nizhal_row_version ?? "0"),
     );
   });
 
