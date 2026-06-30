@@ -8,6 +8,7 @@
       ".turbo",
       "spikes",
       ".handoff",
+      "research",
       "**/*.md",
       "apps/docs",
       "apps/op-sqlite-probe"
