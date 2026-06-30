@@ -17,6 +17,9 @@ export interface HlcClock {
 }
 
 const COUNTER_WIDTH = 4;
+// Full 128-bit (UUID) node id in hex. Truncating to 64 bits aliased distinct devices and made the
+// field-merge HLC tiebreak pick the wrong winner on a collision (a silently-lost edit).
+const NODE_ID_WIDTH = 32;
 const DEFAULT_MAX_DRIFT_MS = 60_000;
 
 export function createHlcClock(options: HlcClockOptions): HlcClock {
@@ -64,7 +67,9 @@ export function formatHlc(timestamp: HlcTimestamp): string {
 }
 
 export function parseHlc(value: string): HlcTimestamp {
-  const match = /^(.{24})-([0-9a-fA-F]{4})-([0-9a-fA-F]{16})$/.exec(value);
+  const match = new RegExp(`^(.{24})-([0-9a-fA-F]{4})-([0-9a-fA-F]{${NODE_ID_WIDTH}})$`).exec(
+    value,
+  );
   if (!match) throw new Error(`Invalid HLC timestamp '${value}'`);
   const wallTime = Date.parse(match[1] ?? "");
   if (Number.isNaN(wallTime)) throw new Error(`Invalid HLC wall time '${value}'`);
@@ -81,7 +86,7 @@ export function compareHlc(left: string, right: string): number {
 
 export function normalizeHlcNodeId(value: string): string {
   const hex = value.replaceAll(/[^0-9a-fA-F]/g, "").toLowerCase();
-  return hex.padStart(16, "0").slice(-16);
+  return hex.padStart(NODE_ID_WIDTH, "0").slice(-NODE_ID_WIDTH);
 }
 
 function assertHlcBounds(
