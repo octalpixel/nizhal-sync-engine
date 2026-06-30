@@ -87,11 +87,17 @@ export interface NizhalClientConfig {
 }
 
 export type NizhalMutatorDefinition<A = any> = MutatorDef<A> & {
+  /** This mutation's own stable domain identity, referenced by a dependent's `dependsOn`. */
+  key?: (args: A) => string | undefined;
+  /** The domain `key` of a mutation this one depends on; if that mutation is poisoned (terminally
+   *  dead-lettered), this one is cascade-cancelled rather than applied against a missing dependency. */
   dependsOn?: (args: A) => string | undefined;
 };
 
 export interface NizhalPoisonEntry {
   idempotencyKey: string;
+  /** The poisoned mutation's domain `key`, so dependents' `dependsOn` can match it. */
+  dependencyKey?: string;
   mutation: Mutation;
   error: Error;
   parkedAt: number;

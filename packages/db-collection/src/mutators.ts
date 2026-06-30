@@ -127,6 +127,7 @@ class PoisonGuard {
     for (const entry of entries) {
       this.deadLetter.push(entry);
       this.poisonedKeys.add(entry.idempotencyKey);
+      if (entry.dependencyKey) this.poisonedKeys.add(entry.dependencyKey);
     }
     this.loaded = true;
     if (this.deadLetter.length > 0) this.emitChange();
@@ -136,18 +137,25 @@ class PoisonGuard {
     return this.poisonedKeys.has(idempotencyKey);
   }
 
-  async park(idempotencyKey: string, mutation: Mutation, error: Error): Promise<void> {
+  async park(
+    idempotencyKey: string,
+    mutation: Mutation,
+    error: Error,
+    dependencyKey?: string,
+  ): Promise<void> {
     if (this.poisonedKeys.has(idempotencyKey)) {
       return;
     }
     const entry: NizhalPoisonEntry = {
       idempotencyKey,
+      ...(dependencyKey ? { dependencyKey } : {}),
       mutation,
       error,
       parkedAt: Date.now(),
     };
     this.deadLetter.push(entry);
     this.poisonedKeys.add(idempotencyKey);
+    if (dependencyKey) this.poisonedKeys.add(dependencyKey);
     await this.deadLetterStorage?.park(entry);
     this.onPoison?.(entry);
     this.emitChange();
@@ -159,7 +167,10 @@ class PoisonGuard {
     if (!this.poisonedKeys.has(idempotencyKey)) return;
     await this.deadLetterStorage?.remove(idempotencyKey);
     const index = this.deadLetter.findIndex((entry) => entry.idempotencyKey === idempotencyKey);
-    if (index >= 0) this.deadLetter.splice(index, 1);
+    if (index >= 0) {
+      const [removed] = this.deadLetter.splice(index, 1);
+      if (removed?.dependencyKey) this.poisonedKeys.delete(removed.dependencyKey);
+    }
     this.poisonedKeys.delete(idempotencyKey);
     this.emitChange();
   }
@@ -251,7 +262,12 @@ export function createNizhalMutators<M extends Record<string, NizhalMutatorDefin
             ...(mutationID > 0 ? { mutationID } : {}),
             ...(dependsOn ? { dependsOn } : {}),
           };
-          await poison.park(idempotencyKey, nizhalMutation, normalized);
+          await poison.park(
+            idempotencyKey,
+            nizhalMutation,
+            normalized,
+            opts.mutators[name]?.key?.(storedMutation.args),
+          );
           await reconcileLocalWrite(transaction.id);
           return;
         }

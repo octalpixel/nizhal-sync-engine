@@ -265,6 +265,37 @@ describe("@nizhal/db-collection integration", () => {
     ]);
     expect(poisonRows.rows).toEqual([]);
   });
+
+  it("cascade-cancels a dependent when its dependency is poisoned (A1)", async () => {
+    const harness = await createHarness({ includePoisonMutator: true });
+    const { mutate, deadLetter, echo, collection } = createClientStack(harness, "owner-1", {});
+    await collection.preload();
+
+    const reported: string[] = [];
+    const originalReport = echo.reportError.bind(echo);
+    echo.reportError = (phase, error) => {
+      reported.push(error instanceof Error ? error.message : String(error));
+      originalReport(phase, error);
+    };
+
+    // 1. Poison the parent and wait until it's terminally dead-lettered (its domain key recorded).
+    mutate.poisonNote({ clientId: "poison-1", body: "bad" });
+    await waitFor(() => deadLetter.some((e) => e.mutation.name === "poisonNote"));
+
+    // 2. Now a dependent declares it depends on the poisoned key. A1: it must cascade-cancel — the
+    //    only path that emits this signal. Without the fix the poisoned key is never tracked, so the
+    //    child pushes/parks instead and this wait times out.
+    mutate.childNote({ clientId: "child-1", body: "child", dependsOn: "poison:poison-1" });
+    await waitFor(() =>
+      reported.some((m) => m.includes("cascade-cancelled: depends on poisoned poison:poison-1")),
+    );
+
+    const childRows = await harness.db.query("select * from notes where client_id = $1", [
+      "child-1",
+    ]);
+    expect(childRows.rows).toEqual([]);
+    expect(deadLetter.some((e) => e.mutation.name === "childNote")).toBe(false);
+  });
 });
 
 function createClientStack(
@@ -299,6 +330,7 @@ function createClientStack(
       ...(harness.hasPoison
         ? {
             poisonNote: testMutators.poisonNote,
+            childNote: testMutators.childNote,
           }
         : {}),
     },
@@ -374,18 +406,36 @@ const testMutators = defineMutators({
     })) as { id: number }[];
     return { serverId: result[0]?.id, affectedBuckets: [actor.ownerId] };
   }),
-  poisonNote: defineMutator({ parse: parseAddNote }, async ({ tx, actor, location }, args) => {
-    if (location === "client") {
-      await tx.insert(notes).values({
-        id: 0,
-        owner_id: actor.ownerId,
-        body: args.body,
-        client_id: args.clientId,
-      });
-      return { affectedBuckets: [actor.ownerId] };
-    }
-    throw new Error("deterministic poison failure");
-  }),
+  poisonNote: Object.assign(
+    defineMutator({ parse: parseAddNote }, async ({ tx, actor, location }, args) => {
+      if (location === "client") {
+        await tx.insert(notes).values({
+          id: 0,
+          owner_id: actor.ownerId,
+          body: args.body,
+          client_id: args.clientId,
+        });
+        return { affectedBuckets: [actor.ownerId] };
+      }
+      throw new Error("deterministic poison failure");
+    }),
+    { key: (args: { clientId: string }) => `poison:${args.clientId}` },
+  ),
+  childNote: Object.assign(
+    defineMutator(
+      { parse: (input: unknown) => input as { clientId: string; body: string; dependsOn: string } },
+      async ({ tx, actor, location }, args) => {
+        const result = (await tx.insert(notes).values({
+          id: location === "client" ? 0 : undefined,
+          owner_id: actor.ownerId,
+          body: args.body,
+          client_id: args.clientId,
+        })) as { id: number }[];
+        return { serverId: result[0]?.id, affectedBuckets: [actor.ownerId] };
+      },
+    ),
+    { dependsOn: (args: { dependsOn: string }) => args.dependsOn },
+  ),
 });
 
 function inProcessRealtime(): RealtimeAdapter {
