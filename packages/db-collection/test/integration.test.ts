@@ -172,6 +172,41 @@ describe("@nizhal/db-collection integration", () => {
     expect(collection.toArray.some((n) => n.client_id === "evict-1")).toBe(false);
   });
 
+  it("does not blind-purge a no-bucketField collection on removedBuckets (F1)", async () => {
+    const harness = await createHarness();
+    const { collection, echo } = createClientStack(harness, "owner-1", { noBucketField: true });
+
+    let pulls = 0;
+    const originalPull = echo.pull.bind(echo);
+    echo.pull = async (input) => {
+      pulls += 1;
+      if (pulls === 1) {
+        return {
+          changed: [
+            {
+              table: "notes",
+              rows: [{ id: 10, owner_id: "owner-1", body: "keep", client_id: "keep-1" }],
+            },
+          ],
+          tombstoned: [],
+          cursor: "",
+        };
+      }
+      const result = await originalPull(input);
+      return { ...result, removedBuckets: ["owner-2"] };
+    };
+
+    await collection.preload();
+    await waitFor(() => collection.toArray.some((n) => n.client_id === "keep-1"));
+
+    harness.realtime.publish("owner-1");
+    await waitFor(() => pulls >= 2);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // F1: a still-visible row must survive a revocation it doesn't belong to — no whole-collection wipe.
+    expect(collection.toArray.some((n) => n.client_id === "keep-1")).toBe(true);
+  });
+
   it("removes rows locally after bucket exit, soft delete, and hard delete", async () => {
     const harness = await createHarness();
     const { collection } = createClientStack(harness, "owner-1");
@@ -232,7 +267,11 @@ describe("@nizhal/db-collection integration", () => {
   });
 });
 
-function createClientStack(harness: TestHarness, ownerId: string) {
+function createClientStack(
+  harness: TestHarness,
+  ownerId: string,
+  opts?: { noBucketField?: boolean },
+) {
   const echo = createNizhalClient({
     server: harness.baseUrl,
     subscribeSource: {
@@ -246,7 +285,7 @@ function createClientStack(harness: TestHarness, ownerId: string) {
       name: "notes",
       syncRule: "ownerBucket",
       echo,
-      bucketField: "owner_id",
+      ...(opts?.noBucketField ? {} : { bucketField: "owner_id" as const }),
       getKey: (row) => row.client_id ?? String(row.id),
     }),
   );

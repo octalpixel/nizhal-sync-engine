@@ -241,11 +241,15 @@ async function applyLocalFirstPullResult<Row extends object>(input: {
     upserts.set(key, row);
   };
 
-  if (result.removedBuckets?.length) {
+  if (result.removedBuckets?.length && bucketField) {
+    // Evict only rows we can attribute to a removed bucket. Without a bucketField we cannot
+    // identify which rows belong to the revoked bucket — blind-purging the whole collection would
+    // drop still-visible rows (F1). Row-level revocation for no-bucketField collections is the
+    // server-driven `removed` follow-up.
     const removedBuckets = new Set(result.removedBuckets);
     for (const row of collection.toArray) {
-      const bucket = bucketField ? row[bucketField] : undefined;
-      if (!bucketField || (bucket !== undefined && removedBuckets.has(String(bucket)))) {
+      const bucket = row[bucketField];
+      if (bucket !== undefined && bucket !== null && removedBuckets.has(String(bucket))) {
         stageDelete(getKey(row));
       }
     }
@@ -521,10 +525,10 @@ function purgeRemovedBuckets<Row extends object>(
   getKey: (row: Row) => string,
   write: (message: ChangeMessageOrDeleteKeyMessage<Row, string>) => void,
 ): void {
+  // Without a bucketField we cannot attribute rows to the revoked bucket; never blind-purge the
+  // whole collection (it would drop still-visible rows, F1). Row-level revocation eviction for such
+  // collections is server-driven (`removed`), not bucket-level.
   if (!bucketField) {
-    for (const row of collection.toArray) {
-      write({ type: "delete", key: getKey(row) });
-    }
     return;
   }
 
