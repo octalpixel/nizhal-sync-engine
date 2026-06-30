@@ -267,6 +267,53 @@ describe("sync core", () => {
     expect(realtime.published).toEqual(["owner-1"]);
   });
 
+  it("does not fail a durably-committed push when realtime publish throws (B1)", async () => {
+    const { db, storage } = await createProvisionedStorage();
+    const throwingRealtime: RealtimeAdapter = {
+      publish() {
+        throw new Error("simulated transient realtime publish failure");
+      },
+      subscribe() {
+        return () => {};
+      },
+    };
+    const server = createNizhalServer({
+      db: "postgres://unused",
+      schema: {},
+      mutators: defineMutators({
+        addNote: defineMutator({ parse: parseAddNote }, async ({ tx, actor }, args) => {
+          const result = (await tx.insert(notes).values({
+            owner_id: actor.ownerId,
+            body: args.body,
+            client_id: args.clientId,
+          })) as { id: number }[];
+          return { serverId: result[0]?.id, affectedBuckets: [actor.ownerId] };
+        }),
+      }),
+      syncRules,
+      auth,
+      storage,
+      realtime: throwingRealtime,
+    });
+    const request = {
+      mutations: [
+        {
+          name: "addNote",
+          args: { clientId: "client-b1", body: "hi" },
+          clientMutationId: "cmid-b1",
+        },
+      ],
+    };
+
+    const res = await postJson(server.app, "/sync/push", request);
+    const noteRows = await db.query<{ id: number }>("select id from notes");
+
+    // The mutation commits; a post-commit publish failure must NOT fail the push nor drop the ack.
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(await res.json()).toEqual({ applied: ["cmid-b1"] });
+    expect(noteRows.rows.length).toBe(1);
+  });
+
   it("delivers bucket-scoped repull pings over /sync/stream after a push", async () => {
     const { storage } = await createProvisionedStorage();
     const server = createNizhalServer({

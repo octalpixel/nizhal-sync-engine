@@ -454,8 +454,20 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
         const mutationBuckets =
           pushed.affectedBuckets ??
           (await affectedBuckets(storage, config.syncRules, actor, pushed.mutatorResult));
-        for (const bucket of mutationBuckets) {
-          await realtime.publish(bucket);
+        // The mutation has committed. A post-commit realtime publish is best-effort: a transient
+        // failure must not fail the (durable) push nor abort the rest of the batch — connected
+        // clients reconcile via their next pull. Surface it for observability; never rethrow.
+        try {
+          for (const bucket of mutationBuckets) {
+            await realtime.publish(bucket);
+          }
+        } catch (error) {
+          observer.onError?.({
+            phase: "push",
+            code: error instanceof Error ? error.message : String(error),
+            clientMutationId: mutation.clientMutationId,
+            error,
+          });
         }
       }
       if (acknowledged) applied.push(mutation.clientMutationId);
