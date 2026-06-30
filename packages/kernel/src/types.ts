@@ -62,6 +62,19 @@ export interface MutatorCtx {
   now: () => number;
   newId: () => string;
   jobs: JobScheduler;
+  /**
+   * Server-authoritative, per-bucket monotonic assignment: the next `sequenceColumn` value for the
+   * rows of `table` scoped to `scopeColumn = scopeValue`. Computed under a per-scope lock on the
+   * server so two offline clients can never collide (e.g. two invoice #1s). On the client it returns
+   * a provisional local guess that rebases to the authoritative value on the next pull — never
+   * compute a server-meaningful sequence client-side and trust it.
+   */
+  nextInBucket?: (input: {
+    table: string;
+    sequenceColumn: string;
+    scopeColumn: string;
+    scopeValue: string | number;
+  }) => Promise<number>;
 }
 
 export type MutatorFn<A> = (ctx: MutatorCtx, args: A) => Promise<unknown> | unknown;

@@ -573,6 +573,29 @@ function createClientMutatorCtx(collections: NizhalCollectionMap, actor: Actor) 
     now: () => Date.now(),
     newId: () => safeRandomUUID(),
     jobs: noopJobs(),
+    // Provisional client-side guess (local max + 1) for the optimistic UI; the server assigns the
+    // authoritative value under a lock and the row rebases to it on the next pull.
+    nextInBucket: async ({
+      table,
+      sequenceColumn,
+      scopeColumn,
+      scopeValue,
+    }: {
+      table: string;
+      sequenceColumn: string;
+      scopeColumn: string;
+      scopeValue: string | number;
+    }) => {
+      const collection = collections[table];
+      if (!collection) return 1;
+      let max = 0;
+      for (const row of collection.toArray as Record<string, unknown>[]) {
+        if (String(row[scopeColumn]) !== String(scopeValue)) continue;
+        const value = Number(row[sequenceColumn]);
+        if (Number.isFinite(value) && value > max) max = value;
+      }
+      return max + 1;
+    },
   };
 }
 

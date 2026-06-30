@@ -954,6 +954,19 @@ async function createMutatorCtx(
     newId: () => crypto.randomUUID(),
     jobs: createJobScheduler(tx),
     conflicts: conflictList,
+    nextInBucket: async ({ table, sequenceColumn, scopeColumn, scopeValue }) => {
+      // Serialize per (table, sequenceColumn, scope) within this transaction so two concurrent
+      // applies can't both read the same max and assign a colliding value.
+      const lockKey = `nizhal:nextInBucket:${table}:${sequenceColumn}:${scopeColumn}:${String(scopeValue)}`;
+      await executeRows(tx.db, sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      const rows = await executeRows<{ next: number }>(
+        tx.db,
+        sql`select coalesce(max(${sql.identifier(sequenceColumn)}), 0) + 1 as next
+            from ${sql.identifier(table)}
+            where ${sql.identifier(scopeColumn)} = ${scopeValue}`,
+      );
+      return Number(rows[0]?.next ?? 1);
+    },
   };
 }
 
