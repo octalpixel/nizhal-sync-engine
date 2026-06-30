@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nizhal-realtime",
+  // `main` is resolved relative to THIS config file's dir (src/adapters/cloudflare/),
+  // pointing up to the package's built output. Run `pnpm --filter @nizhal/server build` first.
+  "main": "../../../dist/adapters/cloudflare/worker.entry.js",
+  "compatibility_date": "2025-01-01",
+  "observability": {
+    "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "NizhalBucket",
+        "name": "NizhalBucket"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["NizhalBucket"]
+    }
+  ]
+}

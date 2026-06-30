@@ -1,0 +1,4 @@
+# Expo native dirs are regenerated via `expo prebuild` (CNG) — not committed.
+/ios
+/android
+/.expo

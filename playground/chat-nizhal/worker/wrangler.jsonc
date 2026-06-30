@@ -1,0 +1,8 @@
+{
+  "name": "nizhal-chat-realtime",
+  "main": "../../../packages/server/dist/adapters/cloudflare/worker.entry.js",
+  "compatibility_date": "2025-01-01",
+  "observability": { "enabled": true },
+  "durable_objects": { "bindings": [{ "class_name": "NizhalBucket", "name": "NizhalBucket" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NizhalBucket"] }]
+}

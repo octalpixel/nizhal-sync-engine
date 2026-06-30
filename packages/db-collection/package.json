@@ -1,0 +1,58 @@
+{
+  "name": "@nizhal/db-collection",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "test:local-first": "vitest run test/local-first.test.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@nizhal/kernel": "workspace:*",
+    "@tanstack/browser-db-sqlite-persistence": "^0.2.4",
+    "@tanstack/db": "^0.6.12",
+    "@tanstack/db-sqlite-persistence-core": "^0.2.4",
+    "@tanstack/offline-transactions": "^1.0.37",
+    "@tanstack/react-native-db-sqlite-persistence": "^0.2.4",
+    "drizzle-orm": "^0.45.2",
+    "yjs": "^13.6.31"
+  },
+  "peerDependencies": {
+    "@journeyapps/wa-sqlite": "^1.7.0",
+    "@op-engineering/op-sqlite": "^17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    },
+    "@journeyapps/wa-sqlite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.3",
+    "@journeyapps/wa-sqlite": "^1.7.0",
+    "@nizhal/kernel": "workspace:*",
+    "@nizhal/server": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ws": "^8.18.1",
+    "better-sqlite3": "^12.11.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wa-sqlite": "^1.0.0",
+    "ws": "^8.21.0"
+  }
+}

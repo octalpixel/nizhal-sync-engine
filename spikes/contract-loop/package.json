@@ -1,0 +1,11 @@
+{
+  "name": "spike-contract-loop",
+  "private": true,
+  "type": "module",
+  "description": "THROWAWAY spike: prove Zod -> JSON-Schema/OpenAPI -> generated typed client with NO server import (RFC §4.7, contract-and-coupling.md)",
+  "dependencies": {
+    "openapi-typescript": "^7.13.0",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
+  }
+}

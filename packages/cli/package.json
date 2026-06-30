@@ -1,0 +1,31 @@
+{
+  "name": "@nizhal/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "nizhal": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@nizhal/kernel": "workspace:*",
+    "@nizhal/server": "workspace:*",
+    "jiti": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+*.db
+.handoff/
+*-scratchpad.md
+*-implementation-notes.md
+*-manager-notes.md
+
+# wrangler local dev state (miniflare/workerd)
+.wrangler/
+**/.wrangler/
+.dev.vars
+.agents/

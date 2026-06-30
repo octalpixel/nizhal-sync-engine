@@ -1,0 +1,8 @@
+{
+  "name": "spike-sync-adapter",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tanstack/db": "^0.6.10"
+  }
+}

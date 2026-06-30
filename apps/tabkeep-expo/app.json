@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Tabkeep",
+    "slug": "tabkeep-expo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.echo.tabkeep" },
+    "android": { "package": "com.echo.tabkeep" },
+    "web": { "bundler": "metro" }
+  }
+}

@@ -1,0 +1,1209 @@
+import {
+  type Actor,
+  type BucketKey,
+  type ContractSchemaSource,
+  type Cursor,
+  INITIAL_CURSOR,
+  type MembershipQuery,
+  type MutatorPredicate,
+  type MutatorTx,
+  type ParameterQuery,
+  type PullResult,
+  type Query,
+  type SyncRules,
+  collectSyncRuleTables,
+  flattenDataQueries,
+  isNizhalTable,
+  schemaMergeMode,
+  schemaTableName,
+  tableName,
+} from "@nizhal/kernel";
+import type { MergeMode } from "@nizhal/kernel";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import type { Table } from "drizzle-orm/table";
+import { getTableName } from "drizzle-orm/table";
+import postgres from "postgres";
+import {
+  type DrizzleClient,
+  type NizhalDb,
+  type PgliteClient,
+  type PostgresClient,
+  type StorageTx,
+  createStorageTx,
+  executeRows,
+  toNizhalDb,
+} from "../drizzle-db.js";
+import {
+  nizhalAuditLog,
+  nizhalClientBuckets,
+  nizhalClients,
+  nizhalMutations,
+  nizhalTombstones,
+} from "../engine-tables.js";
+
+export type { StorageTx } from "../drizzle-db.js";
+
+export interface AuditEntry {
+  rowVersion: string;
+  clientMutationId: string;
+  mutationName: string;
+  args: unknown;
+  actor: Record<string, unknown>;
+  clientId: string | null;
+  mutationId: number | null;
+  hlc: string | null;
+  affectedBuckets: string[];
+  createdAt: string;
+}
+
+export interface AuditQuery {
+  buckets?: string[];
+  actor?: Record<string, unknown>;
+  sinceVersion?: string;
+  untilVersion?: string;
+  limit?: number;
+}
+
+export type PendingAuditEntry = Omit<AuditEntry, "rowVersion" | "createdAt">;
+
+/** The DB-decoupling seam. Default impl = postgresStorage; alternates (d1/sqlite/mysql) are adapters. RFC §4.6. */
+export interface StorageAdapter {
+  /** Scoped cursor pull over the storage-issued total-order cursor. */
+  getChanges(input: {
+    actor: Actor;
+    syncRules: SyncRules;
+    cursor: Cursor;
+    deviceId?: string;
+    limit?: number;
+  }): Promise<PullResult>;
+  getActorBuckets?(input: {
+    actor: Actor;
+    syncRules: SyncRules;
+    tx?: StorageTx;
+  }): Promise<BucketKey[]>;
+  /** Run a mutator's writes atomically (one business op = one transaction). */
+  transaction<T>(fn: (tx: StorageTx) => Promise<T>): Promise<T>;
+  authorizeMutatorTx(input: {
+    tx: StorageTx;
+    mutatorTx: MutatorTx;
+    actor: Actor;
+    syncRules: SyncRules;
+  }): Promise<MutatorTx>;
+  claimMutation(tx: StorageTx, clientMutationId: string): Promise<boolean>;
+  checkMutationSequence?(
+    tx: StorageTx,
+    input: { clientID: string; mutationID: number },
+  ): Promise<"apply" | "alreadyApplied" | "outOfOrder">;
+  readLastMutationId(clientID: string, tx?: StorageTx): Promise<number>;
+  isApplied(clientMutationId: string, tx?: StorageTx): Promise<boolean>;
+  appliedMutationError?(clientMutationId: string, tx?: StorageTx): Promise<string | null>;
+  recordApplied(
+    clientMutationId: string,
+    map?: { clientId?: string; serverId?: string; error?: string },
+    tx?: StorageTx,
+  ): Promise<void>;
+  appendAudit?(tx: StorageTx, entry: PendingAuditEntry): Promise<void>;
+  getAuditLog?(query: AuditQuery): Promise<AuditEntry[]>;
+  /** Emit columns/triggers/indexes from schema + syncRules (used by `nizhal migrate`). */
+  provision(input: {
+    schema: Record<string, ContractSchemaSource>;
+    syncRules: SyncRules;
+    audit?: boolean;
+  }): Promise<void>;
+  getClient?(): PostgresClient | PgliteClient | DrizzleClient;
+}
+
+export interface ProvisionPlan {
+  statements: string[];
+}
+
+export interface SyncedTablePlan {
+  table: string;
+  bucketColumns: string[];
+  merge: MergeMode;
+}
+
+export interface PostgresStorageOptions {
+  connectionString: string;
+  client?: PostgresClient | PgliteClient | DrizzleClient;
+}
+
+const DEFAULT_AUDIT_LIMIT = 100;
+const MAX_AUDIT_LIMIT = 1_000;
+
+function parseAuditVersion(value: string): bigint {
+  if (!/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error(`Invalid audit row version '${value}'`);
+  }
+  return BigInt(value);
+}
+
+function normalizeAuditLimit(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_AUDIT_LIMIT;
+  if (!Number.isInteger(value) || value < 1)
+    throw new Error("Audit limit must be a positive integer");
+  return Math.min(value, MAX_AUDIT_LIMIT);
+}
+
+function asAuditActor(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error("Stored audit actor is not a JSON object");
+  return value;
+}
+
+function asAuditBuckets(value: unknown): string[] {
+  if (!Array.isArray(value) || !value.every((bucket) => typeof bucket === "string")) {
+    throw new Error("Stored audit buckets are not a string array");
+  }
+  return value;
+}
+
+/** DEFAULT storage: any Postgres, no logical replication. (C6 provision, C7 getChanges, C8 transaction/idempotency) */
+export function postgresStorage(opts: PostgresStorageOptions): StorageAdapter {
+  const rawClient = opts.client ?? postgres(opts.connectionString);
+  const normalized = toNizhalDb(rawClient);
+  const db = normalized.db;
+  return {
+    async getChanges(input) {
+      return getPostgresChanges(db, input);
+    },
+    async getActorBuckets(input) {
+      const bucketRows = await resolveActorBucketRows(
+        input.tx?.db ?? db,
+        input.actor,
+        input.syncRules,
+      );
+      return Array.from(collectBucketKeys(bucketRows));
+    },
+    async transaction(fn) {
+      return db.transaction(async (tx) => fn(createStorageTx(tx)));
+    },
+    async authorizeMutatorTx(input) {
+      const bucketRows = await resolveActorBucketRows(
+        input.tx.db,
+        input.actor,
+        input.syncRules,
+        true,
+      );
+      return createAuthorizedMutatorTx(input.mutatorTx, input.tx.db, bucketRows);
+    },
+    async claimMutation(tx, clientMutationId) {
+      const rows = await tx.db
+        .insert(nizhalMutations)
+        .values({ clientMutationId })
+        .onConflictDoNothing()
+        .returning();
+      return rows.length === 1;
+    },
+    async readLastMutationId(clientID, tx) {
+      const rows = await (tx?.db ?? db)
+        .select({ lastMutationId: nizhalClients.lastMutationId })
+        .from(nizhalClients)
+        .where(eq(nizhalClients.clientId, clientID))
+        .limit(1);
+      return Number(rows[0]?.lastMutationId ?? 0);
+    },
+    async isApplied(clientMutationId, tx) {
+      const rows = await (tx?.db ?? db)
+        .select({ clientMutationId: nizhalMutations.clientMutationId })
+        .from(nizhalMutations)
+        .where(eq(nizhalMutations.clientMutationId, clientMutationId))
+        .limit(1);
+      return rows.length === 1;
+    },
+    async appliedMutationError(clientMutationId, tx) {
+      const target = tx?.db ?? db;
+      const rows = await target
+        .select({ error: nizhalMutations.error })
+        .from(nizhalMutations)
+        .where(eq(nizhalMutations.clientMutationId, clientMutationId))
+        .limit(1);
+      return rows[0]?.error ?? null;
+    },
+    async checkMutationSequence(tx, input) {
+      await tx.db
+        .insert(nizhalClients)
+        .values({ clientId: input.clientID, lastMutationId: 0 })
+        .onConflictDoNothing();
+      const rows = await executeRows<{ last_mutation_id: number }>(
+        tx.db,
+        sql`select last_mutation_id from _nizhal_clients where client_id = ${input.clientID} for update`,
+      );
+      const lastMutationId = Number(rows[0]?.last_mutation_id ?? 0);
+      if (input.mutationID <= lastMutationId) return "alreadyApplied";
+      if (input.mutationID > lastMutationId + 1) return "outOfOrder";
+      await tx.db
+        .update(nizhalClients)
+        .set({ lastMutationId: input.mutationID })
+        .where(eq(nizhalClients.clientId, input.clientID));
+      return "apply";
+    },
+    async recordApplied(clientMutationId, map, tx) {
+      const target = tx?.db ?? db;
+      await target
+        .insert(nizhalMutations)
+        .values({
+          clientMutationId,
+          clientId: map?.clientId ?? null,
+          serverId: map?.serverId ?? null,
+          error: map?.error ?? null,
+        })
+        .onConflictDoUpdate({
+          target: nizhalMutations.clientMutationId,
+          set: {
+            clientId: map?.clientId ?? null,
+            serverId: map?.serverId ?? null,
+            error: map?.error ?? null,
+            appliedAt: sql`now()`,
+          },
+        });
+    },
+    async appendAudit(tx, entry) {
+      await tx.db.insert(nizhalAuditLog).values({
+        clientMutationId: entry.clientMutationId,
+        mutationName: entry.mutationName,
+        args: entry.args,
+        actor: entry.actor,
+        clientId: entry.clientId,
+        mutationId: entry.mutationId,
+        hlc: entry.hlc,
+        affectedBuckets: entry.affectedBuckets,
+      });
+    },
+    async getAuditLog(query) {
+      const predicates = [];
+      if (query.sinceVersion !== undefined) {
+        predicates.push(
+          sql`${nizhalAuditLog.rowVersion} > ${parseAuditVersion(query.sinceVersion)}`,
+        );
+      }
+      if (query.untilVersion !== undefined) {
+        predicates.push(
+          sql`${nizhalAuditLog.rowVersion} <= ${parseAuditVersion(query.untilVersion)}`,
+        );
+      }
+      if (query.actor !== undefined) {
+        predicates.push(sql`${nizhalAuditLog.actor} @> ${JSON.stringify(query.actor)}::jsonb`);
+      }
+      if (query.buckets !== undefined && query.buckets.length > 0) {
+        predicates.push(
+          sql`${nizhalAuditLog.affectedBuckets} ?| array[${sql.join(
+            query.buckets.map((bucket) => sql`${bucket}`),
+            sql`, `,
+          )}]`,
+        );
+      }
+      const rows = await db
+        .select()
+        .from(nizhalAuditLog)
+        .where(predicates.length > 0 ? and(...predicates) : undefined)
+        .orderBy(asc(nizhalAuditLog.rowVersion))
+        .limit(normalizeAuditLimit(query.limit));
+      return rows.map((row) => ({
+        rowVersion: row.rowVersion.toString(),
+        clientMutationId: row.clientMutationId,
+        mutationName: row.mutationName,
+        args: row.args,
+        actor: asAuditActor(row.actor),
+        clientId: row.clientId,
+        mutationId: row.mutationId,
+        hlc: row.hlc,
+        affectedBuckets: asAuditBuckets(row.affectedBuckets),
+        createdAt: row.createdAt.toISOString(),
+      }));
+    },
+    async provision(input) {
+      const plan = buildPostgresProvisionPlan(input);
+      for (const statement of plan.statements) await db.execute(sql.raw(statement));
+    },
+    getClient() {
+      return rawClient;
+    },
+  };
+}
+
+export class WriteAuthorizationError extends Error {
+  constructor(
+    readonly table: string,
+    readonly operation: "insert" | "update" | "delete",
+  ) {
+    super(`actor is not authorized to ${operation} rows in '${table}'`);
+    this.name = "WriteAuthorizationError";
+  }
+}
+
+function createAuthorizedMutatorTx(
+  mutatorTx: MutatorTx,
+  db: NizhalDb,
+  bucketRows: Map<string, { rule: SyncRules[string]; rows: Record<string, unknown>[] }>,
+): MutatorTx {
+  const scopes = collectWriteScopes(bucketRows);
+
+  return {
+    insert(table) {
+      return {
+        async values(row) {
+          const rows = await mutatorTx.insert(table).values(row);
+          assertAuthorizedResult(table, rows, "insert", scopes);
+          return rows;
+        },
+      };
+    },
+    update(table) {
+      return {
+        set(patch) {
+          return {
+            async where(predicate) {
+              const before = await selectRowsForWrite(db, table, predicate);
+              assertAuthorizedRows(table, before, "update", scopes);
+              const rows = await mutatorTx.update(table).set(patch).where(predicate);
+              assertAuthorizedResult(table, rows, "update", scopes);
+              return rows;
+            },
+          };
+        },
+      };
+    },
+    delete(table) {
+      return {
+        async where(predicate) {
+          const before = await selectRowsForWrite(db, table, predicate);
+          assertAuthorizedRows(table, before, "delete", scopes);
+          const rows = await mutatorTx.delete(table).where(predicate);
+          assertAuthorizedResult(table, rows, "delete", scopes);
+          return rows;
+        },
+      };
+    },
+  };
+}
+
+interface WriteScope {
+  predicates: Query["predicates"];
+  bucketRows: readonly Record<string, unknown>[];
+}
+
+function collectWriteScopes(
+  bucketRows: Map<string, { rule: SyncRules[string]; rows: Record<string, unknown>[] }>,
+): Map<string, WriteScope[]> {
+  const scopes = new Map<string, WriteScope[]>();
+  for (const { rule, rows } of bucketRows.values()) {
+    for (const query of flattenDataQueries(rule.data(bucketProxy(rule.bucketColumns ?? [])))) {
+      const tableScopes = scopes.get(query.table) ?? [];
+      tableScopes.push({ predicates: query.predicates, bucketRows: rows });
+      scopes.set(query.table, tableScopes);
+    }
+  }
+  return scopes;
+}
+
+async function selectRowsForWrite<TTable extends Table>(
+  db: NizhalDb,
+  table: TTable,
+  predicate: MutatorPredicate<TTable>,
+): Promise<Record<string, unknown>[]> {
+  const where = typeof predicate === "function" ? predicate(table) : predicate;
+  return executeRows<Record<string, unknown>>(
+    db,
+    sql`select * from ${sql.identifier(getTableName(table))} where ${where} for update`,
+  );
+}
+
+function assertAuthorizedRows<TTable extends Table>(
+  table: TTable,
+  rows: readonly unknown[],
+  operation: WriteAuthorizationError["operation"],
+  scopes: Map<string, WriteScope[]>,
+): void {
+  const tableName = getTableName(table);
+  const tableScopes = scopes.get(tableName) ?? [];
+  for (const value of rows) {
+    if (!isRecord(value) || !tableScopes.some((scope) => rowMatchesScope(value, scope))) {
+      throw new WriteAuthorizationError(tableName, operation);
+    }
+  }
+}
+
+function assertAuthorizedResult<TTable extends Table>(
+  table: TTable,
+  result: unknown,
+  operation: WriteAuthorizationError["operation"],
+  scopes: Map<string, WriteScope[]>,
+): void {
+  if (!Array.isArray(result)) {
+    throw new WriteAuthorizationError(getTableName(table), operation);
+  }
+  assertAuthorizedRows(table, result, operation, scopes);
+}
+
+function rowMatchesScope(row: Record<string, unknown>, scope: WriteScope): boolean {
+  return scope.bucketRows.some((bucketRow) =>
+    scope.predicates.every((predicate) => {
+      const rowValue = row[predicate.column];
+      const bucketValue = bucketRow[predicate.bucket.key];
+      return (
+        rowValue !== undefined &&
+        rowValue !== null &&
+        bucketValue !== undefined &&
+        bucketValue !== null &&
+        String(rowValue) === String(bucketValue)
+      );
+    }),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function encodeCursor(version: bigint): Cursor {
+  return btoa(version.toString()).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function decodeCursor(cursor: Cursor): bigint | null {
+  if (cursor === INITIAL_CURSOR) return 0n;
+  try {
+    const base64 = cursor.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const decoded = atob(padded);
+    if (!/^(0|[1-9][0-9]*)$/.test(decoded)) return null;
+    return BigInt(decoded);
+  } catch {
+    return null;
+  }
+}
+
+async function normalizePullCursor(
+  db: NizhalDb,
+  cursor: Cursor,
+): Promise<{ effective: bigint; reset: boolean }> {
+  const decoded = decodeCursor(cursor);
+  if (decoded === null) return { effective: 0n, reset: true };
+  const rows = await executeRows<{ last_value: unknown }>(
+    db,
+    sql`select last_value from _nizhal_row_version_seq`,
+  );
+  const highWatermark = bigintValue(rows[0]?.last_value) ?? 0n;
+  if (decoded > highWatermark) return { effective: 0n, reset: true };
+  return { effective: decoded, reset: false };
+}
+
+async function getPostgresChanges(
+  db: NizhalDb,
+  input: {
+    actor: Actor;
+    syncRules: SyncRules;
+    cursor: Cursor;
+    deviceId?: string;
+    limit?: number;
+  },
+): Promise<PullResult> {
+  const { effective: cursor, reset: cursorReset } = await normalizePullCursor(db, input.cursor);
+  const syncedTables = collectSyncRuleTables(input.syncRules);
+  const bucketRows = await resolveActorBucketRows(db, input.actor, input.syncRules);
+  const bucketKeys = Array.from(collectBucketKeys(bucketRows));
+  const candidates: PullCandidate[] = [];
+  const seenRows = new Set<string>();
+
+  for (const { rule, rows } of bucketRows.values()) {
+    const queries = flattenDataQueries(rule.data(bucketProxy(rule.bucketColumns ?? [])));
+    for (const query of queries) {
+      if (!syncedTables.has(query.table)) continue;
+      if (rows.length === 0) continue;
+      const queryRows = await executeRows<Record<string, unknown>>(
+        db,
+        buildDataQuery(query, rows, cursor),
+      );
+      for (const row of queryRows) {
+        const rowKey = rowIdentity(query.table, row);
+        if (seenRows.has(rowKey)) continue;
+        seenRows.add(rowKey);
+        const version = bigintValue(row._nizhal_row_version);
+        if (version === null) continue;
+        candidates.push({ type: "change", table: query.table, row, version });
+      }
+    }
+  }
+
+  candidates.push(...(await getRemovalCandidates(db, cursor, bucketKeys)));
+  const visibleRemovalRows = await getVisibleRemovalRows(db, bucketRows, candidates);
+  const scopedCandidates = candidates.filter(
+    (candidate) =>
+      candidate.type !== "bucket_exit" ||
+      !visibleRemovalRows.has(`${candidate.table}:${candidate.id}`),
+  );
+  scopedCandidates.sort(compareCandidates);
+  const limit = input.limit;
+  const page =
+    limit !== undefined && limit > 0 ? scopedCandidates.slice(0, limit) : scopedCandidates;
+  const hasMore = limit !== undefined && limit > 0 && scopedCandidates.length > page.length;
+
+  const changed = new Map<string, Record<string, unknown>[]>();
+  const tombstoned: PullResult["tombstoned"] = [];
+  const removed: NonNullable<PullResult["removed"]> = [];
+  let nextVersion = cursor;
+  for (const candidate of page) {
+    nextVersion = candidate.version;
+    if (candidate.type === "change") {
+      const tableRows = changed.get(candidate.table) ?? [];
+      tableRows.push(candidate.row);
+      changed.set(candidate.table, tableRows);
+      continue;
+    }
+    const removal = {
+      table: candidate.table,
+      id: candidate.id,
+      ...(candidate.key !== candidate.id ? { key: candidate.key } : {}),
+    };
+    if (candidate.type === "tombstone") tombstoned.push(removal);
+    else removed.push(removal);
+  }
+
+  const nextCursor = encodeCursor(nextVersion);
+  const removedBuckets = await reconcileClientBuckets(db, {
+    actor: input.actor,
+    deviceId: input.deviceId,
+    currentBuckets: bucketKeys,
+    cursor: nextCursor,
+  });
+  return {
+    changed: Array.from(changed, ([table, rows]) => ({ table, rows })),
+    tombstoned,
+    removed,
+    removedBuckets,
+    cursor: nextCursor,
+    ...(cursorReset ? { cursorReset: true } : {}),
+    ...(hasMore ? { hasMore: true } : {}),
+  };
+}
+
+async function resolveActorBucketRows(
+  db: NizhalDb,
+  actor: Actor,
+  rules: SyncRules,
+  lockMembershipRows = false,
+): Promise<
+  Map<
+    string,
+    {
+      rule: SyncRules[string];
+      rows: Record<string, unknown>[];
+    }
+  >
+> {
+  const result = new Map<
+    string,
+    {
+      rule: SyncRules[string];
+      rows: Record<string, unknown>[];
+    }
+  >();
+
+  for (const [name, rule] of Object.entries(rules)) {
+    const parameters = rule.parameters(actor);
+    result.set(name, {
+      rule,
+      rows: await resolveParameterRows(db, actor, parameters, lockMembershipRows),
+    });
+  }
+
+  return result;
+}
+
+async function resolveParameterRows(
+  db: NizhalDb,
+  actor: Actor,
+  parameters: ParameterQuery | Record<string, never>,
+  lockMembershipRows = false,
+): Promise<Record<string, unknown>[]> {
+  if (isMembershipQuery(parameters)) {
+    return executeRows<Record<string, unknown>>(
+      db,
+      buildMembershipParameterQuery(parameters, lockMembershipRows),
+    );
+  }
+  if (!isQuery(parameters)) return [];
+  if (parameters.raw) return executeRows<Record<string, unknown>>(db, sql.raw(parameters.raw));
+  const bucketColumns = getBucketColumns(parameters);
+  if (!bucketColumns) return [];
+
+  const row: Record<string, unknown> = {};
+  for (const [bucketKey, column] of Object.entries(bucketColumns)) {
+    const value = actorValue(actor, bucketKey, column);
+    if (value === undefined || value === null) return [];
+    row[bucketKey] = value;
+  }
+  return [row];
+}
+
+function buildMembershipParameterQuery(
+  parameters: MembershipQuery,
+  lockRows: boolean,
+): ReturnType<typeof sql> {
+  const selectParts = Object.entries(parameters.bucketColumns).map(
+    ([bucketKey, column]) => sql`${sql.identifier(column)} as ${sql.identifier(bucketKey)}`,
+  );
+  const whereParts = Object.entries(parameters.where).map(
+    ([column, value]) => sql`${sql.identifier(column)} = ${value}`,
+  );
+  if (whereParts.length === 0) {
+    throw new Error("Membership parameter query requires at least one where predicate");
+  }
+  const lock = lockRows ? sql` for share` : sql``;
+  return sql`select ${sql.join(selectParts, sql`, `)} from ${sql.identifier(parameters.table)} where ${sql.join(whereParts, sql` and `)}${lock}`;
+}
+
+function buildDataQuery(
+  query: Query,
+  bucketRows: readonly Record<string, unknown>[],
+  cursor: bigint,
+): ReturnType<typeof sql> {
+  const source = query.raw
+    ? sql`(${sql.raw(query.raw)}) as ${sql.identifier("_nizhal_source")}`
+    : sql.identifier(query.table);
+  const conditions = [
+    sql`${sql.identifier("_nizhal_row_version")} > ${cursor.toString()}::bigint`,
+    sql`${sql.identifier("deleted_at")} is null`,
+    buildBucketScope(query, bucketRows),
+  ];
+  return sql`select * from ${source}
+where ${sql.join(conditions, sql` and `)}
+order by ${sql.identifier("_nizhal_row_version")} asc`;
+}
+
+function buildBucketScope(
+  query: Query,
+  bucketRows: readonly Record<string, unknown>[],
+): ReturnType<typeof sql> {
+  if (bucketRows.length === 0) {
+    throw new Error("Cannot build sync-rule data query without bucket rows");
+  }
+  if (query.predicates.length === 1) {
+    const predicate = query.predicates[0];
+    if (!predicate) throw new Error("Missing sync-rule bucket predicate");
+    const values = collectBucketValues(bucketRows, predicate.bucket.key);
+    if (values.length === 0) {
+      throw new Error(`Missing sync-rule bucket value '${predicate.bucket.key}'`);
+    }
+    if (values.length === 1) {
+      return sql`${sql.identifier(predicate.column)} = ${values[0]}`;
+    }
+    return inArray(sql.identifier(predicate.column), values);
+  }
+
+  const scopes: ReturnType<typeof sql>[] = [];
+  for (const bucketRow of bucketRows) {
+    const predicates: ReturnType<typeof sql>[] = [];
+    for (const predicate of query.predicates) {
+      const value = bucketRow[predicate.bucket.key];
+      if (value === undefined || value === null) {
+        predicates.length = 0;
+        break;
+      }
+      predicates.push(sql`${sql.identifier(predicate.column)} = ${value}`);
+    }
+    if (predicates.length === query.predicates.length) {
+      scopes.push(sql`(${sql.join(predicates, sql` and `)})`);
+    }
+  }
+  if (scopes.length === 0) {
+    throw new Error("Missing sync-rule bucket values for multi-predicate query");
+  }
+  const [onlyScope] = scopes;
+  if (scopes.length === 1 && onlyScope) return onlyScope;
+  return sql`(${sql.join(scopes, sql` or `)})`;
+}
+
+function collectBucketValues(
+  bucketRows: readonly Record<string, unknown>[],
+  bucketKey: string,
+): unknown[] {
+  const values: unknown[] = [];
+  const seen = new Set<string>();
+  for (const bucketRow of bucketRows) {
+    const value = bucketRow[bucketKey];
+    if (value === undefined || value === null) continue;
+    const identity = typeof value === "object" ? JSON.stringify(value) : String(value);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    values.push(value);
+  }
+  return values;
+}
+
+type PullCandidate =
+  | {
+      type: "change";
+      table: string;
+      row: Record<string, unknown>;
+      version: bigint;
+    }
+  | {
+      type: "tombstone" | "bucket_exit";
+      table: string;
+      id: string;
+      key: string;
+      version: bigint;
+    };
+
+async function getRemovalCandidates(
+  db: NizhalDb,
+  cursor: bigint,
+  bucketKeys: readonly string[],
+): Promise<PullCandidate[]> {
+  if (bucketKeys.length === 0) return [];
+  const rows = await db
+    .select({
+      tableName: nizhalTombstones.tableName,
+      rowId: nizhalTombstones.rowId,
+      clientKey: nizhalTombstones.clientKey,
+      kind: nizhalTombstones.kind,
+      rowVersion: nizhalTombstones.rowVersion,
+    })
+    .from(nizhalTombstones)
+    .where(
+      sql`${nizhalTombstones.rowVersion} > ${cursor.toString()}::bigint and ${inArray(
+        nizhalTombstones.bucketKey,
+        [...bucketKeys],
+      )}`,
+    )
+    .orderBy(asc(nizhalTombstones.rowVersion));
+  const removals: PullCandidate[] = [];
+  for (const row of rows) {
+    removals.push({
+      type: row.kind === "bucket_exit" ? "bucket_exit" : "tombstone",
+      table: row.tableName,
+      id: row.rowId,
+      key: row.clientKey,
+      version: row.rowVersion,
+    });
+  }
+  return removals;
+}
+
+async function getVisibleRemovalRows(
+  db: NizhalDb,
+  bucketRows: Map<string, { rule: SyncRules[string]; rows: Record<string, unknown>[] }>,
+  candidates: readonly PullCandidate[],
+): Promise<Set<string>> {
+  const idsByTable = new Map<string, Set<string>>();
+  for (const candidate of candidates) {
+    if (candidate.type !== "bucket_exit") continue;
+    const ids = idsByTable.get(candidate.table) ?? new Set<string>();
+    ids.add(candidate.id);
+    idsByTable.set(candidate.table, ids);
+  }
+  if (idsByTable.size === 0) return new Set();
+
+  const visible = new Set<string>();
+  for (const { rule, rows } of bucketRows.values()) {
+    if (rows.length === 0) continue;
+    for (const query of flattenDataQueries(rule.data(bucketProxy(rule.bucketColumns ?? [])))) {
+      const ids = idsByTable.get(query.table);
+      if (!ids?.size) continue;
+      const queryRows = await executeRows<{ id: unknown }>(
+        db,
+        buildVisibleRowsQuery(query, rows, [...ids]),
+      );
+      for (const row of queryRows) visible.add(`${query.table}:${String(row.id)}`);
+    }
+  }
+  return visible;
+}
+
+function buildVisibleRowsQuery(
+  query: Query,
+  bucketRows: readonly Record<string, unknown>[],
+  ids: readonly string[],
+): ReturnType<typeof sql> {
+  const source = query.raw
+    ? sql`(${sql.raw(query.raw)}) as ${sql.identifier("_nizhal_source")}`
+    : sql.identifier(query.table);
+  return sql`select ${sql.identifier("id")} from ${source}
+where ${sql.identifier("id")}::text in ${ids}
+  and ${sql.identifier("deleted_at")} is null
+  and ${buildBucketScope(query, bucketRows)}`;
+}
+
+function collectBucketKeys(
+  bucketRows: Map<string, { rule: SyncRules[string]; rows: Record<string, unknown>[] }>,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const { rows } of bucketRows.values()) {
+    for (const row of rows) {
+      for (const value of Object.values(row)) {
+        if (value !== undefined && value !== null) keys.add(String(value));
+      }
+    }
+  }
+  return keys;
+}
+
+async function reconcileClientBuckets(
+  db: NizhalDb,
+  input: {
+    actor: Actor;
+    deviceId?: string;
+    currentBuckets: readonly BucketKey[];
+    cursor: Cursor;
+  },
+): Promise<BucketKey[]> {
+  const current = new Set(input.currentBuckets.map(String));
+  if (!input.deviceId) return [];
+  const storageClientId = actorScopedDeviceId(input.actor, input.deviceId);
+  const previous = await storedClientBuckets(db, storageClientId);
+  const removed = Array.from(new Set(previous.filter((bucket) => !current.has(bucket)))).sort();
+
+  await db.delete(nizhalClientBuckets).where(eq(nizhalClientBuckets.clientId, storageClientId));
+  for (const bucket of current) {
+    await db
+      .insert(nizhalClientBuckets)
+      .values({
+        clientId: storageClientId,
+        bucketKey: bucket,
+        lastSeenCursor: decodeCursor(input.cursor) ?? 0n,
+      })
+      .onConflictDoUpdate({
+        target: [nizhalClientBuckets.clientId, nizhalClientBuckets.bucketKey],
+        set: {
+          lastSeenCursor: decodeCursor(input.cursor) ?? 0n,
+          updatedAt: sql`now()`,
+        },
+      });
+  }
+
+  return removed;
+}
+
+async function storedClientBuckets(db: NizhalDb, clientId: string): Promise<string[]> {
+  const rows = await db
+    .select({ bucketKey: nizhalClientBuckets.bucketKey })
+    .from(nizhalClientBuckets)
+    .where(eq(nizhalClientBuckets.clientId, clientId))
+    .orderBy(asc(nizhalClientBuckets.bucketKey));
+  return rows.map((row) => row.bucketKey);
+}
+
+function actorScopedDeviceId(actor: Actor, deviceId: string): string {
+  return JSON.stringify(["actor-device", actor.ownerId, actor.userId, deviceId]);
+}
+
+function rowIdentity(table: string, row: Record<string, unknown>): string {
+  return `${table}:${row.id === undefined || row.id === null ? JSON.stringify(row) : String(row.id)}`;
+}
+
+function compareCandidates(left: PullCandidate, right: PullCandidate): number {
+  if (left.version === right.version) return 0;
+  return left.version < right.version ? -1 : 1;
+}
+
+function bigintValue(value: unknown): bigint | null {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
+  if (typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value)) return BigInt(value);
+  return null;
+}
+
+function actorValue(actor: Actor, bucketKey: string, column: string): unknown {
+  if (bucketKey in actor) return actor[bucketKey];
+  const camelColumn = snakeToCamel(column);
+  if (camelColumn in actor) return actor[camelColumn];
+  if (column in actor) return actor[column];
+  return undefined;
+}
+
+function snakeToCamel(value: string): string {
+  return value.replaceAll(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+function getBucketColumns(query: Query): Record<string, string> | null {
+  const candidate = query as Query & { bucketColumns?: Record<string, string> };
+  return candidate.bucketColumns ?? null;
+}
+
+function isMembershipQuery(value: unknown): value is MembershipQuery {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as MembershipQuery).kind === "echo-membership" &&
+    typeof (value as MembershipQuery).table === "string" &&
+    typeof (value as MembershipQuery).where === "object" &&
+    (value as MembershipQuery).where !== null &&
+    typeof (value as MembershipQuery).bucketColumns === "object" &&
+    (value as MembershipQuery).bucketColumns !== null
+  );
+}
+
+function isQuery(value: unknown): value is Query {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Query).kind === "nizhal-query" &&
+    typeof (value as Query).table === "string" &&
+    Array.isArray((value as Query).predicates)
+  );
+}
+
+function bucketProxy(
+  keys: readonly string[],
+): Record<string, { kind: "bucket-column"; key: string }> {
+  return new Proxy(
+    {},
+    {
+      get(_target, property) {
+        if (typeof property !== "string") return undefined;
+        if (keys.length > 0 && !keys.includes(property)) {
+          throw new Error(`Unknown sync-rule bucket key '${property}'`);
+        }
+        return { kind: "bucket-column", key: property };
+      },
+    },
+  );
+}
+
+export function buildPostgresProvisionPlan(input: {
+  schema: Record<string, ContractSchemaSource>;
+  syncRules: SyncRules;
+  audit?: boolean;
+}): ProvisionPlan {
+  const tablePlans = syncedTablePlans(input.schema, input.syncRules);
+  return {
+    statements: [
+      ...engineStatements(),
+      ...(input.audit !== false ? auditStatements() : []),
+      ...tablePlans.flatMap(tableStatements),
+    ],
+  };
+}
+
+function auditStatements(): string[] {
+  return [
+    `create table if not exists _nizhal_audit_log (
+  row_version bigint primary key default _nizhal_next_row_version(),
+  client_mutation_id text not null,
+  mutation_name text not null,
+  args jsonb not null,
+  actor jsonb not null,
+  client_id text,
+  mutation_id bigint,
+  hlc text,
+  affected_buckets jsonb not null,
+  created_at timestamptz not null default now()
+)`,
+    "create index if not exists _nizhal_audit_log_created_at_idx on _nizhal_audit_log (created_at)",
+    "create index if not exists _nizhal_audit_log_actor_idx on _nizhal_audit_log using gin (actor)",
+    "create index if not exists _nizhal_audit_log_buckets_idx on _nizhal_audit_log using gin (affected_buckets)",
+  ];
+}
+
+function syncedTablePlans(
+  schema: Record<string, ContractSchemaSource>,
+  syncRules: SyncRules,
+): SyncedTablePlan[] {
+  const schemaTables = new Map<string, string>();
+  const schemaMerge = new Map<string, MergeMode>();
+  for (const [fallbackName, source] of Object.entries(schema)) {
+    const resolvedName = isNizhalTable(source)
+      ? tableName(source)
+      : schemaTableName(source, fallbackName);
+    schemaTables.set(resolvedName, resolvedName);
+    schemaTables.set(fallbackName, resolvedName);
+    schemaMerge.set(resolvedName, schemaMergeMode(source));
+  }
+  const plans = new Map<string, SyncedTablePlan>();
+  for (const table of collectSyncRuleTables(syncRules).values()) {
+    const resolvedTable = schemaTables.get(table.table) ?? table.table;
+    plans.set(resolvedTable, {
+      table: resolvedTable,
+      bucketColumns: Array.from(table.bucketColumns).sort(),
+      merge: schemaMerge.get(resolvedTable) ?? "lww",
+    });
+  }
+  for (const [table, merge] of schemaMerge) {
+    if (merge !== "field" || plans.has(table)) continue;
+    plans.set(table, { table, bucketColumns: [], merge });
+  }
+  return Array.from(plans.values());
+}
+
+function engineStatements(): string[] {
+  return [
+    `create table if not exists _nizhal_mutations (
+  client_mutation_id text primary key,
+  client_id text,
+  server_id text,
+  error text,
+  applied_at timestamptz not null default now()
+)`,
+    `create table if not exists _nizhal_clients (
+  client_id text primary key,
+  last_mutation_id bigint not null default 0
+)`,
+    `create table if not exists _nizhal_sync_control (
+  id boolean primary key default true,
+  suppress_notify boolean not null default false,
+  updated_at timestamptz not null default now(),
+  constraint _nizhal_sync_control_singleton check (id)
+)`,
+    "create sequence if not exists _nizhal_row_version_seq",
+    "insert into _nizhal_sync_control (id) values (true) on conflict (id) do nothing",
+    `create or replace function _nizhal_next_row_version()
+returns bigint
+language plpgsql
+as $$
+declare
+  version bigint;
+begin
+  perform 1 from _nizhal_sync_control where id = true for update;
+  version := nextval('_nizhal_row_version_seq');
+  return version;
+end;
+$$`,
+    `create table if not exists _nizhal_tombstones (
+  table_name text not null,
+  row_id text not null,
+  client_key text not null,
+  bucket_key text not null,
+  kind text not null default 'tombstone',
+  row_version bigint not null default _nizhal_next_row_version(),
+  deleted_at timestamptz not null default now(),
+  primary key (table_name, row_id, bucket_key, row_version)
+)`,
+    "alter table _nizhal_tombstones add column if not exists client_key text",
+    "update _nizhal_tombstones set client_key = row_id where client_key is null",
+    "alter table _nizhal_tombstones alter column client_key set not null",
+    "alter table _nizhal_tombstones add column if not exists kind text not null default 'tombstone'",
+    "alter table _nizhal_tombstones add column if not exists row_version bigint",
+    "alter table _nizhal_tombstones alter column row_version set default _nizhal_next_row_version()",
+    "update _nizhal_tombstones set row_version = _nizhal_next_row_version() where row_version is null",
+    "alter table _nizhal_tombstones alter column row_version set not null",
+    "create unique index if not exists _nizhal_tombstones_row_version_idx on _nizhal_tombstones (row_version)",
+    `create table if not exists _nizhal_client_buckets (
+  client_id text not null,
+  bucket_key text not null,
+  last_seen_cursor bigint not null,
+  updated_at timestamptz not null default now(),
+  primary key (client_id, bucket_key)
+)`,
+    `create table if not exists _nizhal_jobs (
+  id bigserial primary key,
+  task_slug text not null,
+  input jsonb not null,
+  status text not null default 'queued',
+  attempts integer not null default 0,
+  max_attempts integer not null default 3,
+  run_at timestamptz not null default now(),
+  locked_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+)`,
+    "create index if not exists _nizhal_jobs_due_idx on _nizhal_jobs (status, run_at, id)",
+    `create or replace function _nizhal_touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  new._nizhal_row_version = _nizhal_next_row_version();
+  return new;
+end;
+$$`,
+  ];
+}
+
+function tableStatements(table: SyncedTablePlan): string[] {
+  const tableNameSql = quoteIdentifier(table.table);
+  return [
+    `alter table ${tableNameSql} add column if not exists updated_at timestamptz not null default now()`,
+    `alter table ${tableNameSql} add column if not exists deleted_at timestamptz`,
+    `alter table ${tableNameSql} add column if not exists _nizhal_row_version bigint not null default _nizhal_next_row_version()`,
+    `alter table ${tableNameSql} alter column _nizhal_row_version set default _nizhal_next_row_version()`,
+    ...(table.merge === "field"
+      ? [
+          `alter table ${tableNameSql} add column if not exists _meta jsonb not null default '{}'::jsonb`,
+        ]
+      : []),
+    `drop trigger if exists ${quoteIdentifier(`_nizhal_touch_${table.table}`)} on ${tableNameSql}`,
+    `create trigger ${quoteIdentifier(`_nizhal_touch_${table.table}`)}
+before update on ${tableNameSql}
+for each row
+execute function _nizhal_touch_updated_at()`,
+    ...table.bucketColumns.flatMap((bucketColumn) => bucketStatements(table.table, bucketColumn)),
+  ];
+}
+
+function bucketStatements(table: string, bucketColumn: string): string[] {
+  const tableNameSql = quoteIdentifier(table);
+  const columnNameSql = quoteIdentifier(bucketColumn);
+  const indexName = quoteIdentifier(`_nizhal_${table}_${bucketColumn}_row_version_idx`);
+  const removalFunction = quoteIdentifier(`_nizhal_remove_${table}_${bucketColumn}`);
+  const removalTrigger = quoteIdentifier(`_nizhal_remove_${table}_${bucketColumn}_trg`);
+  return [
+    `create index if not exists ${indexName} on ${tableNameSql} (${columnNameSql}, _nizhal_row_version)`,
+    `create or replace function ${removalFunction}()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'DELETE' then
+    insert into _nizhal_tombstones
+      (table_name, row_id, client_key, bucket_key, kind, row_version, deleted_at)
+    values (
+      ${sqlLiteral(table)},
+      old.id::text,
+      coalesce(to_jsonb(old)->>'client_id', old.id::text),
+      old.${columnNameSql}::text,
+      'tombstone',
+      _nizhal_next_row_version(),
+      now()
+    );
+    return old;
+  end if;
+
+  if old.deleted_at is null and new.deleted_at is not null then
+    insert into _nizhal_tombstones
+      (table_name, row_id, client_key, bucket_key, kind, row_version, deleted_at)
+    values (
+      ${sqlLiteral(table)},
+      old.id::text,
+      coalesce(to_jsonb(old)->>'client_id', old.id::text),
+      old.${columnNameSql}::text,
+      'tombstone',
+      _nizhal_next_row_version(),
+      now()
+    );
+  elsif old.${columnNameSql} is distinct from new.${columnNameSql} then
+    insert into _nizhal_tombstones
+      (table_name, row_id, client_key, bucket_key, kind, row_version, deleted_at)
+    values (
+      ${sqlLiteral(table)},
+      old.id::text,
+      coalesce(to_jsonb(old)->>'client_id', old.id::text),
+      old.${columnNameSql}::text,
+      'bucket_exit',
+      _nizhal_next_row_version(),
+      now()
+    );
+  end if;
+  return new;
+end;
+$$`,
+    `drop trigger if exists ${quoteIdentifier(`_nizhal_tombstone_${table}_${bucketColumn}_trg`)} on ${tableNameSql}`,
+    `drop trigger if exists ${removalTrigger} on ${tableNameSql}`,
+    `create trigger ${removalTrigger}
+after update or delete on ${tableNameSql}
+for each row
+execute function ${removalFunction}()`,
+  ];
+}
+
+function quoteIdentifier(identifier: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
+    throw new Error(`Invalid Postgres identifier '${identifier}'`);
+  }
+  return `"${identifier}"`;
+}
+
+function sqlLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}

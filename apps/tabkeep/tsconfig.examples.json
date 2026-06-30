@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": [
+    "src/schema.ts",
+    "src/mutators.ts",
+    "src/sync-rules.ts",
+    "src/server.ts",
+    "src/client.ts",
+    "examples"
+  ]
+}

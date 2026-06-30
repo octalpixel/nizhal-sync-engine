@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Nizhal">
+  <!-- top half-dot (the mark) -->
+  <path d="M10 23 A14 14 0 0 1 38 23 Z" fill="#f4f4f5"/>
+  <!-- mirror line -->
+  <rect x="7" y="23.1" width="34" height="1.8" rx="0.9" fill="#f4f4f5"/>
+  <!-- reflection: bottom half-dot, dimmer -->
+  <path d="M10 25 A14 14 0 0 0 38 25 Z" fill="#f4f4f5" opacity="0.32"/>
+</svg>

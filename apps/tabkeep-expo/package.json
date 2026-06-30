@@ -1,0 +1,43 @@
+{
+  "name": "tabkeep-expo",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "check-types": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~56.0.15",
+    "@nizhal/db-collection": "workspace:*",
+    "@nizhal/kernel": "workspace:*",
+    "@nizhal/react-native": "workspace:*",
+    "@op-engineering/op-sqlite": "^17.0.0",
+    "@react-native-community/netinfo": "^11.5.2",
+    "@tanstack/db": "^0.6.12",
+    "@tanstack/db-sqlite-persistence-core": "^0.2.4",
+    "@tanstack/offline-transactions": "^1.0.37",
+    "@tanstack/react-db": "^0.1.60",
+    "@tanstack/react-native-db-sqlite-persistence": "^0.2.4",
+    "drizzle-orm": "^0.45.2",
+    "expo": "~56.0.12",
+    "expo-status-bar": "~56.0.4",
+    "isomorphic-webcrypto": "^2.3.8",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-nitro-fetch": "^1.4.2",
+    "react-native-nitro-modules": "^0.35.10",
+    "react-native-nitro-text-decoder": "^0.2.0",
+    "react-native-nitro-websockets": "^1.0.3",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.2"
+  }
+}

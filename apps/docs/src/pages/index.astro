@@ -1,0 +1,436 @@
+---
+const SITE = 'https://nizhal.dev';
+const GITHUB = 'https://github.com/octalpixel/nizhal';
+
+const mutatorsCode = `import { defineMutator, defineMutators } from "@nizhal/kernel";
+import { z } from "zod";
+import { notes } from "./schema";
+
+export const mutators = defineMutators({
+  addNote: defineMutator(
+    z.object({ id: z.string(), body: z.string() }),
+    async ({ tx, actor, newId }, args) => {
+      const id = args.id || newId();
+      await tx.insert(notes).values({ id, body: args.body, owner_id: actor.ownerId });
+      return { serverId: id, affectedBuckets: [actor.ownerId] };
+    },
+  ),
+});`;
+
+const syncRulesCode = `import { defineSyncRules } from "@nizhal/kernel";
+
+export const syncRules = defineSyncRules((b) => ({
+  myNotes: b.bucket({
+    parameters: () => b.params({ ownerId: "owner_id" }),
+    data: (bucket) => [
+      b.table("notes").where(b.eq("owner_id", bucket.ownerId)),
+    ],
+  }),
+}));`;
+
+const clientCode = `import { createNizhalClient, nizhalCollectionOptions } from "@nizhal/db-collection";
+import { createCollection } from "@tanstack/react-db";
+
+const echo = createNizhalClient({
+  server: "http://localhost:4000",
+  auth: { getHeaders: () => ({ Authorization: \`Bearer \${token}\` }) },
+  bucketsForSyncRule: (rule) => [{ ownerId: session.ownerId }],
+});
+
+const notes = createCollection(
+  nizhalCollectionOptions({ name: "notes", syncRule: "myNotes", echo }),
+);`;
+
+const features = [
+  { t: 'No logical replication', d: 'Cursor pull + sync_control triggers on any Postgres — RDS, Neon, Supabase. No wal_level change, no replication slot.' },
+  { t: 'Your mutators, your invariants', d: 'One business op = one mutator = one server transaction. The mutator body is the merge function — not a black-box resolver.' },
+  { t: 'Declarative sync rules', d: 'Parameters → buckets → scoped data queries. Server-evaluated, no-leak linted. Rows outside a rule never reach a client.' },
+  { t: 'TanStack DB substrate', d: 'Live queries, optimistic writes, durable outbox — wa-sqlite on web, op-sqlite on React Native. Nizhal does not rebuild the client store.' },
+  { t: 'Realtime as a hint', d: 'Bucket-scoped WS ping from the commit chokepoint. Miss a ping? The cursor pull is authoritative — convergence self-heals.' },
+  { t: 'Self-host anywhere', d: 'Node, Bun, Cloudflare Workers + Durable Objects. One process + one Postgres. Export your data; no vendor lock.' },
+];
+
+const steps = [
+  { n: '01', t: 'Define', d: 'Schema in Drizzle, mutators with Zod, sync rules that scope every row to the actor\'s buckets.' },
+  { n: '02', t: 'Sync', d: 'Provision Postgres with nizhal migrate, run createNizhalServer, wire TanStack DB collections on the client.' },
+  { n: '03', t: 'Ship offline-first', d: 'Writes complete locally with the network down; outbox drains on reconnect; devices converge via push + pull.' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nizhal — The offline-first sync engine you own</title>
+    <meta
+      name="description"
+      content="Self-host, no-WAL offline sync: a sync API embedded in your backend on any Postgres, with TanStack DB on the client."
+    />
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="canonical" href="https://nizhal.dev/" />
+    <meta property="og:title" content="Nizhal — The offline-first sync engine you own" />
+    <meta
+      property="og:description"
+      content="Not a sync service — a sync API in your own backend. Cursor pull, idempotent push, declarative sync rules, TanStack DB client."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://nizhal.dev/" />
+    <script>
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try { localStorage.setItem('starlight-theme', 'dark'); } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div class="grid-bg">
+      <header class="nav wrap">
+        <a class="brand" href="/">
+          <img class="logo" src="/favicon.svg" width="28" height="28" alt="Nizhal" />
+          Nizhal
+        </a>
+        <nav class="nav-links">
+          <a href="/introduction/">Docs</a>
+          <a href="/concepts/how-sync-works/">Concepts</a>
+          <a href="/reference/api/">API</a>
+          <a href={GITHUB} aria-label="GitHub" class="gh">GitHub ↗</a>
+        </nav>
+      </header>
+
+      <main class="wrap">
+        <section class="hero">
+          <p class="eyebrow">Self-host · no WAL · TanStack DB</p>
+          <h1>The offline-first<br />sync engine you own.</h1>
+          <p class="sub">
+            Not a sync service — a sync API embedded in your own backend, on any Postgres, no logical
+            replication. Cursor pull, idempotent push, declarative sync rules, and TanStack DB for the
+            client store.
+          </p>
+
+          <div class="cta-row">
+            <a class="btn btn-primary" href="/getting-started/quickstart/">
+              <span class="dot"></span>
+              Quickstart
+            </a>
+            <a class="btn btn-ghost" href={GITHUB}>GitHub ↗</a>
+          </div>
+
+          <div class="setup">
+            <span class="setup-label">Or point your agent at it — it scopes &amp; scaffolds:</span>
+            <div class="setup-prompt">
+              <code id="setup-cmd">Read https://nizhal-docs.pages.dev/start.md then set up Nizhal for this project.</code>
+              <button
+                type="button"
+                class="copy"
+                onclick="navigator.clipboard.writeText(document.getElementById('setup-cmd').textContent).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1400)})"
+                >Copy</button
+              >
+            </div>
+            <a class="setup-link" href="/getting-started/agent-setup/">How agent setup works →</a>
+          </div>
+        </section>
+
+        <section class="showcase">
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-tab="mutators">defineMutators</button>
+            <button class="tab" data-tab="rules">defineSyncRules</button>
+            <button class="tab" data-tab="client">createNizhalClient</button>
+          </div>
+          <pre class="panel active" data-panel="mutators"><code>{mutatorsCode}</code></pre>
+          <pre class="panel" data-panel="rules"><code>{syncRulesCode}</code></pre>
+          <pre class="panel" data-panel="client"><code>{clientCode}</code></pre>
+        </section>
+
+        <section class="steps">
+          {
+            steps.map((s) => (
+              <div class="step">
+                <span class="step-n">{s.n}</span>
+                <h3>{s.t}</h3>
+                <p>{s.d}</p>
+              </div>
+            ))
+          }
+        </section>
+
+        <section class="features">
+          <h2 class="section-title">Define → Sync → Ship offline-first.</h2>
+          <div class="grid">
+            {
+              features.map((f) => (
+                <div class="card">
+                  <h3>{f.t}</h3>
+                  <p>{f.d}</p>
+                </div>
+              ))
+            }
+          </div>
+        </section>
+
+        <section class="cta-band">
+          <h2>Embed sync in your backend.</h2>
+          <p>One Node/Bun process, one Postgres, TanStack DB on the client. No replication slot required.</p>
+          <div class="cta-row center">
+            <a class="btn btn-primary" href="/getting-started/quickstart/">Read the quickstart</a>
+            <a class="btn btn-ghost" href="/getting-started/first-app/">Credit ledger walkthrough</a>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer wrap">
+        <span>Nizhal — நிழல் — reflection. Offline sync you control.</span>
+        <nav class="foot-links">
+          <a href="/getting-started/quickstart/">Quickstart</a>
+          <a href="/reference/api/">API</a>
+          <a href={GITHUB}>GitHub</a>
+          <span class="muted">MIT</span>
+        </nav>
+      </footer>
+    </div>
+
+    <script>
+      document.querySelectorAll<HTMLButtonElement>('.tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+          tab.classList.add('active');
+          const panel = document.querySelector(`.panel[data-panel="${tab.dataset.tab}"]`);
+          panel?.classList.add('active');
+        });
+      });
+    </script>
+
+    <style is:global>
+      :root {
+        --ink: #f4f4f5;
+        --ink-2: #a1a1aa;
+        --muted: #71717a;
+        --line: #27272a;
+        --bg: #09090b;
+        --accent: #f4f4f5;
+        --radius: 12px;
+        --max: 1080px;
+        --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+        --sans:
+          'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+          sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: var(--sans);
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.5;
+      }
+      a { color: inherit; text-decoration: none; }
+      .grid-bg {
+        min-height: 100vh;
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(rgba(129, 140, 248, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(129, 140, 248, 0.04) 1px, transparent 1px);
+        background-size: 34px 34px;
+      }
+      .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 68px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 1.05rem;
+        letter-spacing: -0.01em;
+      }
+      .logo { width: 22px; height: 22px; flex-shrink: 0; }
+      .nav-links {
+        display: flex;
+        gap: 26px;
+        align-items: center;
+        font-size: 0.92rem;
+        color: var(--ink-2);
+      }
+      .nav-links a:hover { color: var(--ink); }
+      .nav-links .gh { color: var(--muted); }
+      .hero { padding: 96px 0 64px; max-width: 760px; }
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin: 0 0 22px;
+        letter-spacing: 0.02em;
+      }
+      h1 {
+        font-size: clamp(2.6rem, 6vw, 4.4rem);
+        line-height: 1.02;
+        letter-spacing: -0.035em;
+        font-weight: 800;
+        margin: 0 0 22px;
+      }
+      .sub {
+        font-size: clamp(1.05rem, 2vw, 1.25rem);
+        color: var(--ink-2);
+        max-width: 620px;
+        margin: 0 0 34px;
+      }
+      .cta-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .cta-row.center { justify-content: center; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        height: 46px;
+        padding: 0 22px;
+        border-radius: 999px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: transform 0.06s ease, background 0.15s ease, border-color 0.15s ease;
+      }
+      .btn:active { transform: translateY(1px); }
+      .btn-primary { background: var(--accent); color: #09090b; }
+      .btn-primary:hover { background: #ffffff; }
+      .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+      .btn-ghost:hover { border-color: #52525b; }
+      .setup { margin-top: 30px; max-width: 640px; }
+      .setup-label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+      .setup-prompt {
+        display: flex; align-items: center; gap: 10px;
+        background: #111114; border: 1px solid var(--line); border-radius: 10px; padding: 9px 9px 9px 13px;
+      }
+      .setup-prompt code {
+        flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--ink);
+      }
+      .copy {
+        flex-shrink: 0; background: transparent; color: var(--muted);
+        border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; font-size: 12px; cursor: pointer;
+      }
+      .copy:hover { color: var(--ink); border-color: #52525b; }
+      .setup-link { display: inline-block; margin-top: 10px; color: var(--muted); font-size: 13px; text-decoration: none; }
+      .setup-link:hover { color: var(--ink); }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.2);
+      }
+      .showcase {
+        margin: 8px 0 88px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #18181b;
+        overflow: hidden;
+      }
+      .tabs {
+        display: flex;
+        gap: 2px;
+        border-bottom: 1px solid var(--line);
+        background: #0f0f12;
+        overflow-x: auto;
+      }
+      .tab {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        color: var(--muted);
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 14px 18px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .tab:hover { color: var(--ink-2); }
+      .tab.active { color: var(--ink); background: #18181b; border-bottom-color: var(--accent); }
+      .panel {
+        display: none;
+        margin: 0;
+        padding: 22px 24px;
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        line-height: 1.65;
+        color: #e4e4e7;
+        overflow-x: auto;
+        tab-size: 2;
+      }
+      .panel.active { display: block; }
+      .panel code { font-family: inherit; white-space: pre; }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin: 0 0 88px;
+      }
+      .step { border-left: 2px solid var(--line); padding: 4px 0 4px 18px; }
+      .step-n { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); }
+      .step h3 { margin: 8px 0 6px; font-size: 1.1rem; letter-spacing: -0.01em; }
+      .step p { margin: 0; color: var(--ink-2); font-size: 0.95rem; }
+      .section-title {
+        font-size: clamp(1.6rem, 3.5vw, 2.3rem);
+        letter-spacing: -0.03em;
+        font-weight: 800;
+        margin: 0 0 28px;
+      }
+      .features { margin-bottom: 88px; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #18181b;
+        padding: 22px;
+        transition: border-color 0.15s ease;
+      }
+      .card:hover { border-color: #3f3f46; }
+      .card h3 { margin: 0 0 8px; font-size: 1.02rem; letter-spacing: -0.01em; }
+      .card p { margin: 0; color: var(--ink-2); font-size: 0.92rem; }
+      .cta-band {
+        text-align: center;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #18181b;
+        padding: 56px 24px;
+        margin-bottom: 72px;
+      }
+      .cta-band h2 {
+        font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+        letter-spacing: -0.03em;
+        font-weight: 800;
+        margin: 0 0 8px;
+      }
+      .cta-band p { color: var(--ink-2); margin: 0 0 24px; }
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding-top: 28px;
+        padding-bottom: 48px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+      .foot-links { display: flex; gap: 20px; align-items: center; }
+      .foot-links a:hover { color: var(--ink); }
+      .foot-links .muted { color: var(--muted); }
+      @media (max-width: 760px) {
+        .steps, .grid { grid-template-columns: 1fr; }
+        .hero { padding: 64px 0 48px; }
+        .nav-links { gap: 16px; }
+        .nav-links a:not(.gh) { display: none; }
+      }
+    </style>
+  </body>
+</html>

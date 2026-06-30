@@ -1,0 +1,115 @@
+/*
+ * Nizhal docs theme — dark-first, monochrome accent, Inter typography.
+ * Mirrors the landing page palette; light mode remains available via ThemeSelect.
+ */
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Monochrome accent ramp — links/active nav read near-white, never colored. */
+  --sl-color-accent-low: #27272a;
+  --sl-color-accent: #f4f4f5;
+  --sl-color-accent-high: #ffffff;
+  --sl-color-text-accent: #fafafa;
+
+  --sl-color-white: #f4f4f5;
+  --sl-color-gray-1: #e4e4e7;
+  --sl-color-gray-2: #a1a1aa;
+  --sl-color-gray-3: #71717a;
+  --sl-color-gray-4: #52525b;
+  --sl-color-gray-5: #3f3f46;
+  --sl-color-gray-6: #27272a;
+  --sl-color-gray-7: #18181b;
+  --sl-color-black: #09090b;
+
+  --sl-color-text: #d4d4d8;
+  --sl-color-text-invert: #09090b;
+
+  --sl-color-bg: #09090b;
+  --sl-color-bg-nav: rgba(9, 9, 11, 0.88);
+  --sl-color-bg-sidebar: #09090b;
+  --sl-color-bg-inline-code: #18181b;
+
+  --sl-color-hairline: #27272a;
+  --sl-color-hairline-light: #1f1f23;
+  --sl-color-hairline-shade: #3f3f46;
+
+  --sl-font:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --sl-color-accent-low: #e4e4e7;
+  --sl-color-accent: #18181b;
+  --sl-color-accent-high: #000000;
+  --sl-color-text-accent: #18181b;
+
+  --sl-color-white: #09090b;
+  --sl-color-gray-1: #18181b;
+  --sl-color-gray-2: #3f3f46;
+  --sl-color-gray-3: #52525b;
+  --sl-color-gray-4: #a1a1aa;
+  --sl-color-gray-5: #e4e4e7;
+  --sl-color-gray-6: #f4f4f5;
+  --sl-color-gray-7: #fafafa;
+  --sl-color-black: #ffffff;
+
+  --sl-color-text: #3f3f46;
+  --sl-color-text-invert: #ffffff;
+
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: rgba(255, 255, 255, 0.88);
+  --sl-color-bg-sidebar: #ffffff;
+  --sl-color-bg-inline-code: #f4f4f5;
+
+  --sl-color-hairline: #e4e4e7;
+  --sl-color-hairline-light: #f4f4f5;
+  --sl-color-hairline-shade: #d4d4d8;
+}
+
+.header {
+  border-bottom: 1px solid var(--sl-color-hairline);
+  backdrop-filter: blur(10px);
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+h1#_top {
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+.sl-markdown-content h2 {
+  margin-top: 2.2rem;
+}
+
+.site-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--sl-color-white);
+}
+
+.sl-markdown-content :not(pre) > code {
+  border-radius: 0.35rem;
+}
+
+.sl-markdown-content pre {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.6rem;
+}
+
+:root .sidebar a[aria-current='page'],
+:root .sidebar a[aria-current='page']:hover {
+  color: var(--sl-color-accent);
+  background-color: var(--sl-color-accent-low);
+  font-weight: 600;
+}
+
+.sl-markdown-content th,
+.sl-markdown-content td {
+  border-color: var(--sl-color-hairline);
+}

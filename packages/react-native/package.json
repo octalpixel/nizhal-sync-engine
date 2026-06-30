@@ -1,0 +1,41 @@
+{
+  "name": "@nizhal/react-native",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@nizhal/db-collection": "workspace:*",
+    "@tanstack/offline-transactions": "^1.0.37"
+  },
+  "peerDependencies": {
+    "@react-native-community/netinfo": ">=11.0.0",
+    "react-native": ">=0.74",
+    "react-native-nitro-fetch": ">=1.4.0",
+    "react-native-nitro-modules": ">=0.35.0",
+    "react-native-nitro-text-decoder": ">=0.2.0",
+    "react-native-nitro-websockets": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@react-native-community/netinfo": "^11.4.1",
+    "react-native-nitro-fetch": "^1.4.2",
+    "react-native-nitro-websockets": "^1.0.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
