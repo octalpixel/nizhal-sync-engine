@@ -497,10 +497,32 @@ async function getPostgresChanges(
     limit?: number;
   },
 ): Promise<PullResult> {
-  const { effective: cursor, reset: cursorReset } = await normalizePullCursor(db, input.cursor);
+  const normalized = await normalizePullCursor(db, input.cursor);
+  let cursor = normalized.effective;
+  let cursorReset = normalized.reset;
   const syncedTables = collectSyncRuleTables(input.syncRules);
   const bucketRows = await resolveActorBucketRows(db, input.actor, input.syncRules);
   const bucketKeys = Array.from(collectBucketKeys(bucketRows));
+
+  // G1: when the actor's bucket set GROWS (gains access to a bucket — joins a channel, is added to
+  // a shop), that bucket's pre-existing rows have row_version <= the global cursor and the `> cursor`
+  // filter would skip them forever. Re-bootstrap (pull from 0 + cursorReset) so the newly-visible
+  // history backfills. Only for an established device — a first-time device (no stored buckets)
+  // bootstraps from its initial cursor normally.
+  if (input.deviceId) {
+    const storedBuckets = await storedClientBuckets(
+      db,
+      actorScopedDeviceId(input.actor, input.deviceId),
+    );
+    if (storedBuckets.length > 0) {
+      const known = new Set(storedBuckets.map(String));
+      if (bucketKeys.some((key) => !known.has(String(key)))) {
+        cursor = 0n;
+        cursorReset = true;
+      }
+    }
+  }
+
   const candidates: PullCandidate[] = [];
   const seenRows = new Set<string>();
 
