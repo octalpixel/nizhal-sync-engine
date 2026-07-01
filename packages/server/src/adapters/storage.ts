@@ -111,6 +111,12 @@ export interface StorageAdapter {
     syncRules: SyncRules;
     audit?: boolean;
   }): Promise<void>;
+  /** Drop every engine artifact and reprovision fresh at the current version (clean-slate upgrade). */
+  reset?(input: {
+    schema: Record<string, ContractSchemaSource>;
+    syncRules: SyncRules;
+    audit?: boolean;
+  }): Promise<void>;
   getClient?(): PostgresClient | PgliteClient | DrizzleClient;
 }
 
@@ -313,8 +319,11 @@ export function postgresStorage(opts: PostgresStorageOptions): StorageAdapter {
       }));
     },
     async provision(input) {
-      const plan = buildPostgresProvisionPlan(input);
-      for (const statement of plan.statements) await db.execute(sql.raw(statement));
+      await provisionToCurrent(db, input);
+    },
+    async reset(input) {
+      for (const statement of buildResetStatements(input)) await db.execute(sql.raw(statement));
+      await provisionToCurrent(db, input);
     },
     getClient() {
       return rawClient;
@@ -1013,6 +1022,175 @@ function bucketProxy(
       },
     },
   );
+}
+
+/**
+ * Current engine schema version. Bump when the `_nizhal_*` infrastructure changes shape, and add a
+ * migration to {@link engineMigrations} that carries an existing DB from the prior version to this one.
+ *   v1 — bigint row-version from a global sequence (`_nizhal_row_version_seq`) under a singleton lock.
+ *   v2 — xid8 row-version = `pg_current_xact_id()`, lock-free + no-skip (commit b46af0-era xid8 fix).
+ */
+export const NIZHAL_ENGINE_VERSION = 2;
+
+type ProvisionInput = {
+  schema: Record<string, ContractSchemaSource>;
+  syncRules: SyncRules;
+  audit?: boolean;
+};
+
+interface EngineMigration {
+  /** The engine version this migration produces (its predecessor is `to - 1`). */
+  to: number;
+  statements(input: ProvisionInput): string[];
+}
+
+const META_TABLE_DDL = `create table if not exists _nizhal_meta (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz not null default now()
+)`;
+
+function stampEngineVersionStatement(version: number): string {
+  return `insert into _nizhal_meta (key, value) values ('engine_version', '${version}')
+on conflict (key) do update set value = excluded.value, updated_at = now()`;
+}
+
+/**
+ * The engine version a database is currently at: `0` = fresh (no engine tables), otherwise the stamped
+ * `_nizhal_meta.engine_version`, or — for a pre-versioning legacy install with no stamp — inferred from
+ * the `_nizhal_tombstones.row_version` column type (xid8 ⇒ v2, bigint ⇒ v1).
+ */
+async function detectEngineVersion(db: NizhalDb): Promise<number> {
+  const stamped = await executeRows<{ value: string }>(
+    db,
+    sql`select value from _nizhal_meta where key = 'engine_version'`,
+  );
+  const raw = stamped[0]?.value;
+  if (raw !== undefined) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  }
+  const present = await executeRows<{ present: boolean }>(
+    db,
+    sql`select to_regclass('_nizhal_tombstones') is not null as present`,
+  );
+  if (!present[0]?.present) return 0;
+  const type = await executeRows<{ udt_name: string }>(
+    db,
+    sql`select udt_name from information_schema.columns
+        where table_name = '_nizhal_tombstones' and column_name = 'row_version'`,
+  );
+  return type[0]?.udt_name === "xid8" ? 2 : 1;
+}
+
+// v1 → v2: bigint sequence row-version → xid8 `pg_current_xact_id()`. Existing bigint versions cast to
+// xid8 numerically (small values that sort strictly below any real transaction id), so row order — and
+// therefore every client's cursor position — is preserved with no re-sync and no data loss.
+function bigintToXid8Statements(input: ProvisionInput): string[] {
+  const tables = syncedTablePlans(input.schema, input.syncRules);
+  const withAudit = input.audit !== false;
+  const stmts: string[] = [];
+
+  // 1. Drop the defaults that hard-depend on the bigint version function so it can be replaced.
+  for (const t of tables) {
+    stmts.push(`alter table ${quoteIdentifier(t.table)} alter column _nizhal_row_version drop default`);
+  }
+  stmts.push("alter table _nizhal_tombstones alter column row_version drop default");
+  if (withAudit) stmts.push("alter table _nizhal_audit_log alter column row_version drop default");
+
+  // 2. Swap the version function to xid8 (return-type change ⇒ drop + create, not replace). plpgsql
+  //    trigger bodies resolve it at runtime, so they need no dependency handling here.
+  stmts.push("drop function if exists _nizhal_next_row_version()");
+  stmts.push(`create function _nizhal_next_row_version()
+returns xid8
+language sql
+as $$ select pg_current_xact_id() $$`);
+
+  // 3. Convert every row-version column bigint → xid8 (numeric text is a valid xid8 literal) + re-default.
+  for (const t of tables) {
+    const n = quoteIdentifier(t.table);
+    stmts.push(`alter table ${n} alter column _nizhal_row_version type xid8 using _nizhal_row_version::text::xid8`);
+    stmts.push(`alter table ${n} alter column _nizhal_row_version set default _nizhal_next_row_version()`);
+  }
+  stmts.push("alter table _nizhal_tombstones alter column row_version type xid8 using row_version::text::xid8");
+  stmts.push("alter table _nizhal_tombstones alter column row_version set default _nizhal_next_row_version()");
+  if (withAudit) {
+    stmts.push("alter table _nizhal_audit_log alter column row_version type xid8 using row_version::text::xid8");
+    stmts.push("alter table _nizhal_audit_log alter column row_version set default _nizhal_next_row_version()");
+  }
+
+  // 4. Retire the global sequence and the UNIQUE tombstone index (rows of one txn now share its xid).
+  stmts.push("drop sequence if exists _nizhal_row_version_seq");
+  stmts.push("drop index if exists _nizhal_tombstones_row_version_key");
+  stmts.push("drop index if exists _nizhal_tombstones_row_version_idx");
+  stmts.push("create index if not exists _nizhal_tombstones_row_version_idx on _nizhal_tombstones (row_version)");
+  return stmts;
+}
+
+const engineMigrations: EngineMigration[] = [{ to: 2, statements: bigintToXid8Statements }];
+
+/**
+ * Bring a database to {@link NIZHAL_ENGINE_VERSION}: provision fresh, run ordered migrations for an
+ * older install, or idempotently refresh a current one — then stamp the version. Throws if the database
+ * is at a NEWER engine version than this server (roll the server forward first).
+ */
+async function provisionToCurrent(db: NizhalDb, input: ProvisionInput): Promise<void> {
+  await db.execute(sql.raw(META_TABLE_DDL));
+  const from = await detectEngineVersion(db);
+  if (from > NIZHAL_ENGINE_VERSION) {
+    throw new Error(
+      `[@nizhal] database engine is v${from}, newer than this server (v${NIZHAL_ENGINE_VERSION}) — upgrade the server before running migrate`,
+    );
+  }
+  if (from > 0 && from < NIZHAL_ENGINE_VERSION) {
+    for (const migration of engineMigrations) {
+      if (migration.to > from && migration.to <= NIZHAL_ENGINE_VERSION) {
+        for (const statement of migration.statements(input)) await db.execute(sql.raw(statement));
+      }
+    }
+  }
+  const plan = buildPostgresProvisionPlan(input);
+  for (const statement of plan.statements) await db.execute(sql.raw(statement));
+  await db.execute(sql.raw(stampEngineVersionStatement(NIZHAL_ENGINE_VERSION)));
+}
+
+/**
+ * Drop every engine artifact (`_nizhal_*` tables/functions/sequence + the per-synced-table row-version
+ * columns, triggers, and bucket indexes) then reprovision fresh at the current version. The clean-slate
+ * upgrade path — for alpha, where discarding local replicas and re-syncing is acceptable.
+ */
+export function buildResetStatements(input: ProvisionInput): string[] {
+  const tables = syncedTablePlans(input.schema, input.syncRules);
+  const stmts: string[] = [];
+  for (const t of tables) {
+    const n = quoteIdentifier(t.table);
+    stmts.push(`drop trigger if exists ${quoteIdentifier(`_nizhal_touch_${t.table}`)} on ${n}`);
+    for (const bucketColumn of t.bucketColumns) {
+      stmts.push(
+        `drop trigger if exists ${quoteIdentifier(`_nizhal_remove_${t.table}_${bucketColumn}_trg`)} on ${n}`,
+      );
+      stmts.push(`drop function if exists ${quoteIdentifier(`_nizhal_remove_${t.table}_${bucketColumn}`)}()`);
+      stmts.push(`drop index if exists ${quoteIdentifier(`_nizhal_${t.table}_${bucketColumn}_row_version_idx`)}`);
+    }
+    stmts.push(`alter table ${n} drop column if exists _nizhal_row_version`);
+    if (t.merge === "field") stmts.push(`alter table ${n} drop column if exists _meta`);
+  }
+  for (const table of [
+    "_nizhal_audit_log",
+    "_nizhal_jobs",
+    "_nizhal_client_buckets",
+    "_nizhal_tombstones",
+    "_nizhal_sync_control",
+    "_nizhal_clients",
+    "_nizhal_mutations",
+    "_nizhal_meta",
+  ]) {
+    stmts.push(`drop table if exists ${table} cascade`);
+  }
+  stmts.push("drop function if exists _nizhal_touch_updated_at() cascade");
+  stmts.push("drop function if exists _nizhal_next_row_version() cascade");
+  stmts.push("drop sequence if exists _nizhal_row_version_seq");
+  return stmts;
 }
 
 export function buildPostgresProvisionPlan(input: {

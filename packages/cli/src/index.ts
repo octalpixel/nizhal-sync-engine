@@ -32,6 +32,9 @@ export async function main(
     case "migrate":
       await migrate(argv.slice(3), env, io);
       break;
+    case "reset":
+      await reset(argv.slice(3), env, io);
+      break;
     case "gen":
       notImplemented("gen", "C4 (typed client from GET /nizhal/contract)");
       break;
@@ -39,7 +42,7 @@ export async function main(
       notImplemented("introspect", "B9 (brownfield schema introspection)");
       break;
     default:
-      io.log("nizhal <migrate|gen|introspect>");
+      io.log("nizhal <migrate|reset|gen|introspect>");
   }
 }
 
@@ -73,6 +76,34 @@ export async function migrate(
   io.log("nizhal migrate complete");
 }
 
+export async function reset(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  io: Io = console,
+): Promise<void> {
+  const parsed = parseArgs(args);
+  if (!parsed.yes) {
+    throw new Error(
+      "nizhal reset DROPS every engine artifact (_nizhal_* tables/functions + per-table row-version " +
+        "columns/triggers) and reprovisions fresh — every client must re-sync from empty. Re-run with --yes to confirm.",
+    );
+  }
+  const config = await loadConfig(parsed.config ?? "nizhal.config.js");
+  const connectionString = parsed.db ?? config.db ?? env.DATABASE_URL;
+  const storage =
+    config.storage ??
+    postgresStorage({ connectionString: requireValue(connectionString, "database URL") });
+  if (!storage.reset) {
+    throw new Error("nizhal reset is not supported by the configured storage adapter");
+  }
+  await storage.reset({
+    schema: config.schema,
+    syncRules: config.syncRules,
+    audit: config.audit !== false,
+  });
+  io.log("nizhal reset complete");
+}
+
 /**
  * Postgres "undefined_table" (42P01) — a synced business table the provision plan expected is absent.
  * Walks the cause chain because the driver (drizzle over postgres-js) wraps the SQLSTATE under `.cause`.
@@ -88,13 +119,14 @@ function isMissingRelationError(error: unknown): boolean {
   return false;
 }
 
-function parseArgs(args: string[]): { config?: string; db?: string } {
-  const parsed: { config?: string; db?: string } = {};
+function parseArgs(args: string[]): { config?: string; db?: string; yes?: boolean } {
+  const parsed: { config?: string; db?: string; yes?: boolean } = {};
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--config") parsed.config = requireValue(args[++index], "--config value");
     else if (arg === "--db") parsed.db = requireValue(args[++index], "--db value");
-    else throw new Error(`Unknown nizhal migrate option '${arg}'`);
+    else if (arg === "--yes" || arg === "-y") parsed.yes = true;
+    else throw new Error(`Unknown nizhal option '${arg}'`);
   }
   return parsed;
 }
