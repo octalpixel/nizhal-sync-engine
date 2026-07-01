@@ -50,7 +50,10 @@ export function createNizhalNitroClient(opts: NizhalNitroClientOptions): NizhalC
   if (opts.useNitroFetch !== false) installNitroFetch();
   const { token, realtimeHost, useNitroFetch: _useNitroFetch, ...config } = opts;
   const subscribeSource = realtimeHost
-    ? nitroCloudflareSubscribeSource({ host: realtimeHost, getToken: () => Promise.resolve(token ?? "") })
+    ? nitroCloudflareSubscribeSource({
+        host: realtimeHost,
+        getToken: () => Promise.resolve(token ?? ""),
+      })
     : nitroWebSocketSource({ server: config.server, token });
   return createNizhalClient({ ...config, subscribeSource });
 }
