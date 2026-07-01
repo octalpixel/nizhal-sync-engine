@@ -1,0 +1,13 @@
+{
+  "name": "spike-pg-to-sqlite-schema",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike": "node spike.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "drizzle-kit": "^0.31.5",
+    "drizzle-orm": "^0.45.2"
+  }
+}

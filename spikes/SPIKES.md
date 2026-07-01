@@ -17,6 +17,13 @@
 - **PASS** `collection.insert(...)` optimistic write appears immediately (offline write path).
 - Confirms `nizhalCollectionOptions` is buildable against the real API: `createCollection({ id, getKey, sync: { sync: ({begin,write,commit,markReady}) => … }, onInsert })`.
 
+### Spike C — schema-once: pgTable → derived sqliteTable → drizzle-kit client migrations (2026-07-02)
+`spikes/pg-to-sqlite-schema/` — run: `npm install && npm run spike`. 13/13 PASS against drizzle-orm 0.45.2 + drizzle-kit 0.31.10 + better-sqlite3:
+- **PASS** `deriveSqliteSchema(pgSchema)` mechanically maps the kernel's pg column set (text/enum, varchar, uuid, integer, bigint53, boolean, timestamptz→epoch-ms, jsonb→json-text, numeric→text, double→real; fail-closed on unknowns) — tabkeep's real tables + a kitchen-sink table derive fully.
+- **PASS** `drizzle-kit/api` `generateSQLiteDrizzleJson` → `generateSQLiteMigration` emits the client CREATE TABLE SQL **from the derived schema** — the exact emit pipeline a `nizhal gen client` would ship.
+- **PASS** typed round-trips through real SQLite via drizzle: `timestamptz` revives as exact `Date`, boolean as `true`, jsonb as structured object, bigint(number) intact.
+- Consequence: **one schema definition (pg) can serve both the server and the `@nizhal/local`-style client**; the convergence RFC's greenfield path A is mechanically real.
+
 ## What is now de-risked
 The two things no amount of doc-writing could confirm — (1) the new contract/codegen decoupling, (2) the beta TanStack DB integration our whole client rests on — both work as designed. Confidence to start Sprint 0 is materially higher.
 
