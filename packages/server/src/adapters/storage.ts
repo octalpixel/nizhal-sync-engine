@@ -461,14 +461,14 @@ interface CursorPosition {
 const INITIAL_POSITION: CursorPosition = { seq: 0n, id: "" };
 
 function encodeCursor(position: CursorPosition): Cursor {
-  return Buffer.from(`${position.seq.toString()} ${position.id}`, "utf8").toString("base64url");
+  return Buffer.from(`${position.seq.toString()}\0${position.id}`, "utf8").toString("base64url");
 }
 
 function decodeCursor(cursor: Cursor): CursorPosition | null {
   if (cursor === INITIAL_CURSOR) return { ...INITIAL_POSITION };
   try {
     const raw = Buffer.from(cursor, "base64url").toString("utf8");
-    const sep = raw.indexOf(" ");
+    const sep = raw.indexOf("\0");
     if (sep === -1) return null;
     const seq = raw.slice(0, sep);
     if (!/^(0|[1-9][0-9]*)$/.test(seq)) return null;
