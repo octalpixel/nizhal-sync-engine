@@ -79,6 +79,31 @@ Why this direction and not the reverse (bolting drizzle queries onto the blob st
 (109 tests, deterministic loss repros). The migration is staged (§10); the blob plane remains the
 shipped sync client until the drizzle-native client passes the *same* repro suites.
 
+### Alternative considered and rejected: building the local plane ON TanStack DB
+
+Rebasing `@nizhal/local` onto TanStack DB (collections + `*-db-sqlite-persistence`) was evaluated
+and rejected (2026-07-02):
+
+- **Structurally impossible for the product**: their persistence stores JSON-blob KV
+  (`key TEXT, value TEXT`) and their query engine is `db-ivm` collections — `db.select()`,
+  `db.query.*`, and drizzle-kit migrations cannot exist on that plane. No drizzle-native effort
+  exists anywhere in their 24-package tree or issue tracker (gh survey 2026-07-02).
+- **Foundation-risk**: open correctness issues sit in exactly the layer that would hold user data —
+  tanstack/db [#1499](https://github.com/TanStack/db/issues/1499) (op-sqlite driver silently
+  returns `[]` for all SELECTs), [#1478](https://github.com/TanStack/db/issues/1478) (persisted
+  collection wiped on stream reconnect), [#1589](https://github.com/TanStack/db/issues/1589)
+  (schemaVersion divergence wipes rows; cursor left behind → permanently empty),
+  [#1486](https://github.com/TanStack/db/issues/1486) (second tab fails leadership),
+  [#1567](https://github.com/TanStack/db/issues/1567) (corrupt DB file, no recovery path). Not a
+  quality judgment — beta infra our sync plane already rides with hardening — but a **placement**
+  judgment: each is a data-loss headline as a foundation and a stale render as a UI layer.
+- **The relationship we keep instead (D9)**: TanStack DB as an *optional layer* — a
+  `localDbCollection()` options-creator sourcing a collection FROM `local.watch(query)` (the exact
+  pattern of their own `query-db-collection`; our `sync.ts` already drives the same
+  `begin/write/commit` API). Buys IVM joins, optimistic cross-collection transactions, and the
+  framework bindings for apps that want them — over authoritative tables. **Deferred until a real
+  consumer asks**; it is a stage-4 deliverable, not a dependency of anything.
+
 ## 5. Path A — greenfield: schema defined once (spiked)
 
 Keep exactly today's authoring model — one transport-free `domain.ts` with `pgTable` + mutators +
@@ -245,6 +270,34 @@ __drizzle_migrations         ← client DDL bookkeeping (already shipped in @niz
 - **Reactivity**: `update_hook` (shipped in `@nizhal/local`) — pull-apply and mutator writes both
   trigger it; `useLiveQuery` just works.
 - **Realtime**: existing WS poke → pull. Nothing changes.
+- **The `tx`/`jobs` purity contract** (already the kernel's design; document it as the rule):
+  server mutators may be impure, but state goes through `tx` (atomic with `_nizhal_row_version`
+  bump, mutation-id dedup record, tombstone triggers — `MutatorCtx`, kernel `types.ts:57-80`) and
+  **external side effects go through `ctx.jobs.enqueue`** (`_nizhal_jobs` insert inside the same
+  transaction, flushed after commit — `server/src/index.ts:711`; transactional outbox, so
+  no-commit-no-job kills the dual-write hazard). In-process service calls (Medusa/porulle services)
+  write PG through *their own* transaction — the triggers still capture them for sync, but they sit
+  outside the mutation's atomicity: treat them like external APIs (jobs) unless they can join `tx`.
+  Client-side, the same-named mutator is the optimistic approximation and **must be pure/replayable**;
+  convergence comes from pull being authoritative, not from the two implementations matching.
+
+### Failure-class invariants (H1–H5) — engineered against the field's observed failures
+
+The §4 issue survey is a checklist of how local-first client stores actually fail. The structural
+defense is already in the layout above: **rows, outbox, cursor, schema version, and the migrations
+journal live in one SQLite file and commit under real transactions** — the field's failures are
+mostly composition failures between separate mechanisms, and we collapse the composition. On top:
+
+| # | Invariant | Against | Mechanism |
+|---|---|---|---|
+| H1 | **No silent reads.** Driver mismatch throws; it never returns `[]`. | #1499 | wa driver already throws on unexpected step codes / ambiguous binding; op-sqlite duck-typing throws when nothing matches; add a **startup canary** (write+read a sentinel row through the full driver path at open). RN drivers stay thin over drizzle's official drivers. |
+| H2 | **Sync only moves data forward.** No stream/reconnect event has a destructive write path. | #1478 | pull-apply is upsert-only; re-bootstrap is an explicit journaled op: truncate + repull + cursor advance in **one SQLite transaction**. |
+| H3 | **Schema evolution is a linear journal, never a policy wipe.** | #1589 | `__drizzle_migrations` (shipped in `@nizhal/local`) + `nizhal gen` snapshot diffs; contract schema-version check at open → apply migrations or *explicit* atomic re-bootstrap (cursor reset in the same tx — the resume point cannot be left behind). No code path where version comparison deletes rows silently. |
+| H4 | **Single-writer multi-tab, owned by us.** | #1486 | Arc B coordinator (Web Locks leader + shared outbox), simplified by the real-tables plane: one WAL-mode file, leader is the sole sync writer, followers read + enqueue. |
+| H5 | **Corruption has a recovery ladder.** | #1567 | `PRAGMA quick_check` at open; recover in order: salvage outbox (the only state the server lacks) → rebuild synced tables (safe by design: they are a cache) → an unreadable outbox is the only true loss, detected and reported. **Exception:** Rung-0 local-only tables have no server copy — recovery ends at an app-owned backup/export hook; docs must say so. |
+
+Gate for all of it: each stage ships against the existing deterministic loss-repro suites
+re-targeted at the drizzle-native store. Invariants that aren't tested are opinions.
 
 **Stages** (each independently shippable, gates = the existing loss-repro suites re-targeted):
 1. **Schema-once + gen** — `deriveSqliteSchema` into kernel (from Spike C), contract column
@@ -270,6 +323,8 @@ __drizzle_migrations         ← client DDL bookkeeping (already shipped in @niz
 | D6 | Optimistic strategy on real tables: direct-apply + replay-rebase vs overlay views | **open** — stage-3 design review |
 | D7 | `numeric` lowering default (text) + per-column override hook | default chosen, revisit with first real consumer |
 | D8 | crdt columns client-side representation | **open** — no app uses them yet; fail-closed until one does |
+| D9 | TanStack DB is a *layer*, never the foundation: `localDbCollection()` sources collections from `local.watch`; deferred until a real consumer | **decided** (§4 rejected-alternative) |
+| D10 | H1–H5 failure-class invariants are stage requirements, gated by the loss-repro suites | **decided** (§10) |
 
 ## 12. Immediate next steps
 
