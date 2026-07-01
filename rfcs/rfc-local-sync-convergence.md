@@ -230,6 +230,29 @@ already loss-tested rather than a second brownfield-special path.
 
 Decision rule: control infra → B1; PG-but-no-taint → B1s; no infra / closed → B2.
 
+### Framework-owned backends (Medusa, porulle): B1s + read-model sync
+
+API-first frameworks add two constraints and one insight:
+
+- **B1 is contraindicated mechanically**, not just socially: their migration tooling diffs schema
+  definitions against the live DB — porulle's `drizzle-kit push` would propose *dropping* our
+  added columns as drift; Medusa's MikroORM owns the schema as a versioned internal. Shadow (B1s)
+  by default.
+- **Asymmetry hardens**: writes always via their API (their services run the real invariants —
+  inventory, pricing, org-scoping); reads captured *below* the API where possible (a committed row
+  is a fact regardless of which write path made it).
+- **Sync the read model, not their raw schema.** A Medusa product is ~30 normalized tables; a POS
+  wants `pos_products(id, title, variant, price, stock)` — a shape their API already computes.
+  The shadow holds the denormalized read model, fed by either **(A)** logical replication + shadow
+  SQL transforms, or **(B)** their event bus → job refetches via their API → upsert the read model
+  (recommended for Medusa: reuses their pricing/visibility logic instead of re-deriving it;
+  deletes/unpublish become tombstones on 404). The engine machinery downstream is unchanged.
+- **porulle first-party play**: we control the framework — capture at the `createScopedDb` proxy
+  (every plugin write passes through it), mount the Nizhal server as a plugin route group, buckets
+  from `organizationId`, contract → `nizhal gen client`. "porulle apps are offline-first out of
+  the box" is the flagship integration; Medusa is the documented B1s recipe proving the pattern on
+  frameworks we don't own.
+
 ## 8. PG-primary; "other frameworks/DBs" = protocol, not adapters
 
 Push-back on adapterizing the storage engine now: the engine's guarantees are **built from PG
