@@ -204,6 +204,32 @@ should be added — it's a `statements[]` array today), host one route group, ac
 three triggers per synced table. That's the honest cost; it's low, and it's the *same* engine we've
 already loss-tested rather than a second brownfield-special path.
 
+### Brownfield tiers (the client is identical in all of them; only the sync target differs)
+
+- **B1 — "own the PG"** (Supabase, self-hosted Medusa/porulle): the walkthrough above. Trigger
+  capture makes the read path zero-code; write path = impure mutators calling their services
+  (through `ctx.jobs`, §10). Strongest guarantees; smallest work.
+- **B1s — shadow sync database** (they have PG but refuse *any* schema taint): run the full engine
+  on a **Nizhal-owned shadow PG**; mirror the synced subset via **Postgres logical replication**
+  (`CREATE PUBLICATION` on their side — a grant, not DDL on their tables; needs
+  `wal_level=logical`). The shadow's own touch/tombstone/notify triggers do the rest, so the
+  xid8/no-skip correctness argument transfers unchanged. Mutators never write the shadow's synced
+  tables — they call the existing API (their DB stays the single source of truth; the write
+  replicates back around the loop, CQRS-style). Fallback feeders: webhooks/events → shadow upserts,
+  or `updatedAt` polling (weakest; deletes need diffing).
+- **B2 — closed backend / pure adapter** (Convex, SaaS APIs, "no new infra"): WatermelonDB's
+  contract verbatim — they implement pull (changes-since-cursor; requires updatedAt-or-counter +
+  delete tracking: the documented WatermelonDB tax) and push (named mutations → their endpoints,
+  idempotent on our mutation id). We ship the client unchanged, the protocol doc, and a Hono
+  server-kit with storage as an interface. **Honest ceiling:** correctness is bounded by their
+  change-tracking; xid8-grade no-skip is not achievable through a generic REST API — never imply
+  it is. Convex note: use a transactional **monotonic version counter** (not wall-clock
+  `updatedAt`) as the cursor, tombstones via mutation helpers — Convex's total write mediation
+  (no out-of-band SQL) makes app-level capture complete, and its reactive queries replace our WS
+  poke natively.
+
+Decision rule: control infra → B1; PG-but-no-taint → B1s; no infra / closed → B2.
+
 ## 8. PG-primary; "other frameworks/DBs" = protocol, not adapters
 
 Push-back on adapterizing the storage engine now: the engine's guarantees are **built from PG
