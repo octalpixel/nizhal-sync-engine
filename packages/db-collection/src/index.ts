@@ -28,6 +28,15 @@ export type {
   NizhalStoreCollections,
   OpenNizhalStoreOptions,
 } from "./store.js";
+export { openNizhalClientGroup } from "./client-group.js";
+export type {
+  NizhalClientGroup,
+  NizhalClientGroupDeadLetter,
+  NizhalCoordinator,
+  NizhalOnlineGate,
+  OpenNizhalClientGroupOptions,
+  SharedMutation,
+} from "./client-group.js";
 export {
   kvSessionStore,
   localStorageSessionStore,
