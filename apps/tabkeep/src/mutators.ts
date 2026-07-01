@@ -59,7 +59,7 @@ export const tabkeepMutators = defineMutators({
     appendEntry(ctx, args, "payment"),
   ),
   renameCustomer: defineMutator(renameCustomerInput, async ({ tx, ownerId }, args) => {
-    await tx.update(customers).set({ name: args.name }).where(eq(customers.id, args.id));
+    await tx.update(customers, { id: args.id }).set({ name: args.name });
     return { serverId: args.id, affectedBuckets: [ownerId] };
   }),
 });

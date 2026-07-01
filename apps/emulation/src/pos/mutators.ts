@@ -92,14 +92,8 @@ export function createPosMutators(poisoned = new Set<string>()): MutatorRegistry
           throw new Error("deterministic poison failure: updateProductName");
         }
         const rows = await tx
-          .update(assets)
-          .set({ name: args.value })
-          .where(
-            location === "server"
-              ? (table) =>
-                  sql`${table.id} = ${args.assetId} and ${table.location_id} = ${locationId}`
-              : eq(assets.id, args.assetId),
-          );
+          .update(assets, { id: args.assetId, location_id: locationId })
+          .set({ name: args.value });
         if (location === "server") requireAffectedAsset(rows);
         return { affectedBuckets: [locationId] };
       },
@@ -112,14 +106,8 @@ export function createPosMutators(poisoned = new Set<string>()): MutatorRegistry
           throw new Error("deterministic poison failure: updateProductSku");
         }
         const rows = await tx
-          .update(assets)
-          .set({ sku: args.value })
-          .where(
-            location === "server"
-              ? (table) =>
-                  sql`${table.id} = ${args.assetId} and ${table.location_id} = ${locationId}`
-              : eq(assets.id, args.assetId),
-          );
+          .update(assets, { id: args.assetId, location_id: locationId })
+          .set({ sku: args.value });
         if (location === "server") requireAffectedAsset(rows);
         return { affectedBuckets: [locationId] };
       },

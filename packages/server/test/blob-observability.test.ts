@@ -245,7 +245,7 @@ describe("blob sync + observability", () => {
       schema: { customers: { table: customers, merge: "field" } },
       mutators: defineMutators({
         updateName: defineMutator({ parse: (input) => input as any }, async ({ tx }, args) => {
-          await tx.update(customers).set({ name: args.value }).where(eq(customers.id, args.id));
+          await tx.update(customers, { id: args.id }).set({ name: args.value });
           return { affectedBuckets: ["owner-1"] };
         }),
         blowup: defineMutator({ parse: (input) => input }, async () => {

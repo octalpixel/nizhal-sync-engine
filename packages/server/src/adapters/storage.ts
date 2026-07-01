@@ -32,6 +32,7 @@ import {
   createStorageTx,
   executeRows,
   toNizhalDb,
+  whereToPredicate,
 } from "../drizzle-db.js";
 import {
   nizhalAuditLog,
@@ -348,31 +349,25 @@ function createAuthorizedMutatorTx(
         },
       };
     },
-    update(table) {
+    update(table, where) {
       return {
-        set(patch) {
-          return {
-            async where(predicate) {
-              const before = await selectRowsForWrite(db, table, predicate);
-              assertAuthorizedRows(table, before, "update", scopes);
-              const rows = await mutatorTx.update(table).set(patch).where(predicate);
-              assertAuthorizedResult(table, rows, "update", scopes);
-              return rows;
-            },
-          };
-        },
-      };
-    },
-    delete(table) {
-      return {
-        async where(predicate) {
+        async set(patch) {
+          const predicate = whereToPredicate(table, where);
           const before = await selectRowsForWrite(db, table, predicate);
-          assertAuthorizedRows(table, before, "delete", scopes);
-          const rows = await mutatorTx.delete(table).where(predicate);
-          assertAuthorizedResult(table, rows, "delete", scopes);
+          assertAuthorizedRows(table, before, "update", scopes);
+          const rows = await mutatorTx.update(table, where).set(patch);
+          assertAuthorizedResult(table, rows, "update", scopes);
           return rows;
         },
       };
+    },
+    async delete(table, where) {
+      const predicate = whereToPredicate(table, where);
+      const before = await selectRowsForWrite(db, table, predicate);
+      assertAuthorizedRows(table, before, "delete", scopes);
+      const rows = await mutatorTx.delete(table, where);
+      assertAuthorizedResult(table, rows, "delete", scopes);
+      return rows;
     },
   };
 }

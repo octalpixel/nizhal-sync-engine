@@ -40,7 +40,7 @@ export const editNote: MutatorFn<z.infer<typeof editNoteInput>> = async ({ tx, o
   if (Object.keys(patch).length === 0) {
     throw new Error("editNote requires title and/or body");
   }
-  await tx.update(notes).set(patch).where(eq(notes.id, args.noteId));
+  await tx.update(notes, { id: args.noteId }).set(patch);
   return { affectedBuckets: [ownerId] };
 };
 
@@ -48,7 +48,7 @@ export const deleteNote: MutatorFn<z.infer<typeof deleteNoteInput>> = async (
   { tx, ownerId },
   args,
 ) => {
-  await tx.delete(notes).where(eq(notes.id, args.noteId));
+  await tx.delete(notes, { id: args.noteId });
   return { affectedBuckets: [ownerId] };
 };
 

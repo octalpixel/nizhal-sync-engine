@@ -25,7 +25,14 @@ export interface JobScheduler {
 
 type TableInsert<TTable extends Table> = TTable["$inferInsert"];
 type TablePatch<TTable extends Table> = Partial<TTable["$inferInsert"]>;
+// Internal (server) predicate type — the drizzle-backed StorageTx + merge helpers still speak SQL.
 export type MutatorPredicate<TTable extends Table> = SQL | ((table: TTable) => SQL);
+
+// Public mutator-facing filter: a typed column→value equality map (e.g. `{ id }`, `{ client_id }`).
+// Structured on purpose — the client optimistic path reads the key directly instead of reflecting it
+// out of a drizzle predicate (which was engine/bundler-fragile). One update/delete authors the same
+// way on client and server.
+export type MutatorWhere<TTable extends Table> = Partial<TTable["$inferSelect"]>;
 
 export interface MutatorTx {
   insert<TTable extends Table>(
@@ -35,16 +42,11 @@ export interface MutatorTx {
   };
   update<TTable extends Table>(
     table: TTable,
+    where: MutatorWhere<TTable>,
   ): {
-    set(patch: TablePatch<TTable>): {
-      where(predicate: MutatorPredicate<TTable>): Promise<unknown>;
-    };
+    set(patch: TablePatch<TTable>): Promise<unknown>;
   };
-  delete<TTable extends Table>(
-    table: TTable,
-  ): {
-    where(predicate: MutatorPredicate<TTable>): Promise<unknown>;
-  };
+  delete<TTable extends Table>(table: TTable, where: MutatorWhere<TTable>): Promise<unknown>;
 }
 
 /**

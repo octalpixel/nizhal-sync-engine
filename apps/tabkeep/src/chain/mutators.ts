@@ -53,19 +53,13 @@ export const chainMutators = defineMutators({
     if (role(ctx) !== "owner" && role(ctx) !== "manager") {
       throw new Error("forbidden: only owner/manager can set price");
     }
-    await ctx.tx
-      .update(products)
-      .set({ price: args.price })
-      .where((t) => eq(t.id, args.id));
+    await ctx.tx.update(products, { id: args.id }).set({ price: args.price });
     return { serverId: args.id, affectedBuckets: [ctx.ownerId] };
   }),
 
   // Any role (a cashier adjusts stock as they sell). Field-merges with a concurrent setPrice.
   adjustStock: defineMutator(adjustStockInput, async (ctx, args) => {
-    await ctx.tx
-      .update(products)
-      .set({ stock: args.stock })
-      .where((t) => eq(t.id, args.id));
+    await ctx.tx.update(products, { id: args.id }).set({ stock: args.stock });
     return { serverId: args.id, affectedBuckets: [ctx.ownerId] };
   }),
 

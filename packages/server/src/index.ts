@@ -45,7 +45,7 @@ import {
   WriteAuthorizationError,
   postgresStorage,
 } from "./adapters/storage.js";
-import { type NizhalDb, executeRows } from "./drizzle-db.js";
+import { type NizhalDb, executeRows, whereToPredicate } from "./drizzle-db.js";
 import {
   type BufferedJobScheduler,
   type JobRegistryInput,
@@ -1004,61 +1004,55 @@ function mergeAwareTx(
     insert(table) {
       return tx.insert(table);
     },
-    update(table) {
+    update(table, where) {
       const tableName = getTableName(table);
       const policy = mergePolicies.get(tableName) ?? { table: "lww", columns: new Map() };
+      const predicate = whereToPredicate(table, where);
       return {
-        set(patch) {
-          return {
-            async where(predicate) {
-              const columns = getTableColumns(table as PgTable) as Record<string, { name: string }>;
-              const crdtPatch: Record<string, unknown> = {};
-              const scalarPatch: Record<string, unknown> = {};
-              for (const [field, value] of Object.entries(patch)) {
-                if (value === undefined || field === "updated_at" || field === "deleted_at") {
-                  continue;
-                }
-                const columnName = columns[field]?.name;
-                if (columnName && policy.columns.get(columnName) === "crdt") {
-                  crdtPatch[field] = value;
-                } else {
-                  scalarPatch[field] = value;
-                }
-              }
-              const results: Record<string, unknown>[][] = [];
-              if (Object.keys(crdtPatch).length > 0) {
-                results.push(await crdtMergeUpdate(tx, table, crdtPatch, predicate));
-              }
-              if (Object.keys(scalarPatch).length > 0) {
-                if (policy.table === "field") {
-                  results.push(
-                    await fieldMergeUpdate(
-                      tx,
-                      table,
-                      scalarPatch,
-                      predicate,
-                      mutationHlc,
-                      mutatorName,
-                      conflicts,
-                    ),
-                  );
-                } else {
-                  results.push(
-                    (await tx.update(table).set(scalarPatch).where(predicate)) as Record<
-                      string,
-                      unknown
-                    >[],
-                  );
-                }
-              }
-              return results.flat();
-            },
-          };
+        async set(patch) {
+          const columns = getTableColumns(table as PgTable) as Record<string, { name: string }>;
+          const crdtPatch: Record<string, unknown> = {};
+          const scalarPatch: Record<string, unknown> = {};
+          for (const [field, value] of Object.entries(patch)) {
+            if (value === undefined || field === "updated_at" || field === "deleted_at") {
+              continue;
+            }
+            const columnName = columns[field]?.name;
+            if (columnName && policy.columns.get(columnName) === "crdt") {
+              crdtPatch[field] = value;
+            } else {
+              scalarPatch[field] = value;
+            }
+          }
+          const results: Record<string, unknown>[][] = [];
+          if (Object.keys(crdtPatch).length > 0) {
+            results.push(await crdtMergeUpdate(tx, table, crdtPatch, predicate));
+          }
+          if (Object.keys(scalarPatch).length > 0) {
+            if (policy.table === "field") {
+              results.push(
+                await fieldMergeUpdate(
+                  tx,
+                  table,
+                  scalarPatch,
+                  predicate,
+                  mutationHlc,
+                  mutatorName,
+                  conflicts,
+                ),
+              );
+            } else {
+              results.push(
+                (await tx.update(table, where).set(scalarPatch)) as Record<string, unknown>[],
+              );
+            }
+          }
+          return results.flat();
         },
       };
     },
-    delete(table) {
-      return tx.delete(table);
+    delete(table, where) {
+      return tx.delete(table, where);
     },
   };
 }

@@ -36,7 +36,7 @@ const noteMutators = defineMutators({
     return { affectedBuckets: [args.owner_id] };
   }),
   updateNote: defineMutator({ parse: parseUpdateNote }, async ({ tx }, args) => {
-    await tx.update(notes).set({ body: args.body }).where(eq(notes.id, args.id));
+    await tx.update(notes, { id: args.id }).set({ body: args.body });
     return { affectedBuckets: ["owner-1"] };
   }),
 });

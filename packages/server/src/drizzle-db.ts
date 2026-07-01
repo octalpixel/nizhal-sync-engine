@@ -1,6 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
-import type { MutatorPredicate, MutatorTx } from "@nizhal/kernel";
-import type { PgTable } from "drizzle-orm/pg-core";
+import type { MutatorTx } from "@nizhal/kernel";
+import { and, eq } from "drizzle-orm";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import type { SQL } from "drizzle-orm/sql";
@@ -40,32 +41,41 @@ export function createStorageTx(db: NizhalDb): StorageTx {
         },
       };
     },
-    update(table) {
+    update(table, where) {
       return {
-        set(patch) {
-          return {
-            async where(predicate) {
-              return db
-                .update(table as PgTable)
-                .set(patch)
-                .where(resolvePredicate(table, predicate))
-                .returning();
-            },
-          };
-        },
-      };
-    },
-    delete(table) {
-      return {
-        async where(predicate) {
+        async set(patch) {
           return db
-            .delete(table as PgTable)
-            .where(resolvePredicate(table, predicate))
+            .update(table as PgTable)
+            .set(patch)
+            .where(whereToPredicate(table, where))
             .returning();
         },
       };
     },
+    async delete(table, where) {
+      return db
+        .delete(table as PgTable)
+        .where(whereToPredicate(table, where))
+        .returning();
+    },
   };
+}
+
+// Compile a structured mutator `where` (a column→value equality map) into a drizzle predicate. The
+// public MutatorTx speaks structured filters; the drizzle-backed layer and merge helpers speak SQL.
+export function whereToPredicate<TTable extends Table>(
+  table: TTable,
+  where: Partial<Record<string, unknown>>,
+): SQL {
+  const columns = table as unknown as Record<string, PgColumn>;
+  const clauses = Object.entries(where).map(([field, value]) => {
+    const column = columns[field];
+    if (!column)
+      throw new Error(`[@nizhal] update/delete where references unknown column '${field}'`);
+    return eq(column, value);
+  });
+  if (clauses.length === 0) throw new Error("[@nizhal] update/delete requires a non-empty where");
+  return (clauses.length === 1 ? clauses[0] : and(...clauses)) as SQL;
 }
 
 export async function executeRows<T extends Record<string, unknown>>(
@@ -83,13 +93,6 @@ export async function closeRawClient(
 ): Promise<void> {
   if (isPostgresClient(client)) await client.end({ timeout: 1 });
   if (isPgliteClient(client)) await client.close();
-}
-
-function resolvePredicate<TTable extends Table>(
-  table: TTable,
-  predicate: MutatorPredicate<TTable>,
-): SQL {
-  return typeof predicate === "function" ? predicate(table) : predicate;
 }
 
 function isNizhalDb(value: unknown): value is NizhalDb {

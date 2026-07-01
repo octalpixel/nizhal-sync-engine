@@ -182,10 +182,10 @@ async function createHarness(
         await tx.insert(records).values({ id: args.id, shop_id: args.shopId, value: args.value });
       }),
       update: defineMutator({ parse: parseRecordPatch }, async ({ tx }, args) => {
-        await tx.update(records).set({ value: args.value }).where(eq(records.id, args.id));
+        await tx.update(records, { id: args.id }).set({ value: args.value });
       }),
       delete: defineMutator({ parse: parseRecordId }, async ({ tx }, args) => {
-        await tx.delete(records).where(eq(records.id, args.id));
+        await tx.delete(records, { id: args.id });
       }),
     }),
   });

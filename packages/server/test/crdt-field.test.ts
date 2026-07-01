@@ -54,13 +54,12 @@ describe("CRDT field merge", () => {
       mutators: defineMutators({
         editBody: defineMutator({ parse: parseBodyEdit }, async ({ tx }, args) => {
           await tx
-            .update(documents)
-            .set({ body: Buffer.from(args.bodyUpdate, "base64") })
-            .where(eq(documents.id, args.id));
+            .update(documents, { id: args.id })
+            .set({ body: Buffer.from(args.bodyUpdate, "base64") });
           return { affectedBuckets: ["owner-1"] };
         }),
         editTitle: defineMutator({ parse: parseScalarEdit }, async ({ tx }, args) => {
-          await tx.update(documents).set({ title: args.value }).where(eq(documents.id, args.id));
+          await tx.update(documents, { id: args.id }).set({ title: args.value });
           return { affectedBuckets: ["owner-1"] };
         }),
       }),
@@ -125,17 +124,16 @@ describe("CRDT field merge", () => {
       mutators: defineMutators({
         editBody: defineMutator({ parse: parseBodyEdit }, async ({ tx }, args) => {
           await tx
-            .update(documents)
-            .set({ body: Buffer.from(args.bodyUpdate, "base64") })
-            .where(eq(documents.id, args.id));
+            .update(documents, { id: args.id })
+            .set({ body: Buffer.from(args.bodyUpdate, "base64") });
           return { affectedBuckets: ["owner-1"] };
         }),
         editTitle: defineMutator({ parse: parseScalarEdit }, async ({ tx }, args) => {
-          await tx.update(documents).set({ title: args.value }).where(eq(documents.id, args.id));
+          await tx.update(documents, { id: args.id }).set({ title: args.value });
           return { affectedBuckets: ["owner-1"] };
         }),
         editLabel: defineMutator({ parse: parseScalarEdit }, async ({ tx }, args) => {
-          await tx.update(documents).set({ label: args.value }).where(eq(documents.id, args.id));
+          await tx.update(documents, { id: args.id }).set({ label: args.value });
           return { affectedBuckets: ["owner-1"] };
         }),
       }),
@@ -246,9 +244,8 @@ describe("CRDT field merge", () => {
       mutators: defineMutators({
         editBody: defineMutator({ parse: parseBodyEdit }, async ({ tx }, args) => {
           await tx
-            .update(documents)
-            .set({ body: Buffer.from(args.bodyUpdate, "base64") })
-            .where(eq(documents.id, args.id));
+            .update(documents, { id: args.id })
+            .set({ body: Buffer.from(args.bodyUpdate, "base64") });
           return { affectedBuckets: ["owner-1"] };
         }),
       }),

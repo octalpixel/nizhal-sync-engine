@@ -117,14 +117,14 @@ export const linearMutators = defineMutators({
   updateIssueStatus: defineMutator(
     z.object({ teamId: id, issueId: id, status }),
     async ({ tx }, args) => {
-      await tx.update(issues).set({ status: args.status }).where(eq(issues.id, args.issueId));
+      await tx.update(issues, { id: args.issueId }).set({ status: args.status });
       return { affectedBuckets: [`team:${args.teamId}`] };
     },
   ),
   assignIssue: defineMutator(
     z.object({ teamId: id, issueId: id, assigneeId: id.nullable() }),
     async ({ tx }, args) => {
-      await tx.update(issues).set({ assignee_id: args.assigneeId }).where(eq(issues.id, args.issueId));
+      await tx.update(issues, { id: args.issueId }).set({ assignee_id: args.assigneeId });
       return { affectedBuckets: [`team:${args.teamId}`] };
     },
   ),

@@ -3,7 +3,6 @@ import {
   type HlcClockOptions,
   type JobScheduler,
   type Mutation,
-  type MutatorPredicate,
   type MutatorTx,
   createHlcClock,
   normalizeHlcNodeId,
@@ -19,7 +18,6 @@ import {
   type StorageAdapter,
   startOfflineExecutor,
 } from "@tanstack/offline-transactions";
-import type { SQLWrapper } from "drizzle-orm/sql";
 import { getTableName } from "drizzle-orm/table";
 import type { Table } from "drizzle-orm/table";
 import type { NizhalClient } from "./client.js";
@@ -609,31 +607,45 @@ function collectionMutatorTx(collections: NizhalCollectionMap): MutatorTx {
         },
       };
     },
-    update(table) {
+    update(table, where) {
       return {
-        set(patch) {
-          return {
-            async where(predicate) {
-              const key = keyFromPredicate(table, predicate);
-              collectionForTable(collections, table).update(key, (draft) => {
-                Object.assign(draft, patch);
-              });
-              return [];
-            },
-          };
-        },
-      };
-    },
-    delete(table) {
-      return {
-        async where(predicate) {
-          const key = keyFromPredicate(table, predicate);
-          collectionForTable(collections, table).delete(key);
+        async set(patch) {
+          const collection = collectionForTable(collections, table);
+          for (const key of keysMatchingWhere(collection, where)) {
+            collection.update(key, (draft) => {
+              Object.assign(draft, patch);
+            });
+          }
           return [];
         },
       };
     },
+    async delete(table, where) {
+      const collection = collectionForTable(collections, table);
+      for (const key of keysMatchingWhere(collection, where)) {
+        collection.delete(key);
+      }
+      return [];
+    },
   };
+}
+
+// Optimistic client update/delete: find the local rows matching the structured `where` and act on them
+// by key. No drizzle-predicate reflection — the row key comes straight off the row (collections key by
+// `id`), so this is engine/bundler-agnostic (the old queryChunks/brand/encoder path is gone).
+function keysMatchingWhere(
+  collection: NizhalCollectionMap[string],
+  where: Record<string, unknown>,
+): string[] {
+  const clauses = Object.entries(where);
+  const keys: string[] = [];
+  for (const row of collection.toArray as Record<string, unknown>[]) {
+    if (clauses.every(([field, value]) => row[field] === value)) {
+      const id = row.id;
+      if (id !== undefined && id !== null) keys.push(String(id));
+    }
+  }
+  return keys;
 }
 
 function collectionForTable(collections: NizhalCollectionMap, table: Table) {
@@ -643,42 +655,6 @@ function collectionForTable(collections: NizhalCollectionMap, table: Table) {
     throw new Error(`[@nizhal/db-collection] missing collection for table '${name}'`);
   }
   return collection;
-}
-
-function keyFromPredicate<TTable extends Table>(
-  table: TTable,
-  predicate: MutatorPredicate<TTable>,
-): string {
-  const resolved = typeof predicate === "function" ? predicate(table) : predicate;
-  const key = extractSimpleIdEquality(resolved);
-  if (key === undefined) {
-    throw new Error("[@nizhal/db-collection] client MutatorTx only supports eq(table.id, value)");
-  }
-  return key;
-}
-
-// Pull the row key out of an `eq(table.id, value)` predicate for the optimistic client update.
-// This reads drizzle's private queryChunks, whose exact shape varies across drizzle versions and
-// bundlers (Metro/Hermes), so identify parts by stable, structural signals: the id column by its
-// `name` getter, and the compared value by the drizzle Param (uniquely the chunk carrying an
-// `encoder`; StringChunk SQL fragments never have one).
-function extractSimpleIdEquality(predicate: SQLWrapper): string | undefined {
-  const chunks = (predicate as { queryChunks?: unknown[] }).queryChunks;
-  if (!Array.isArray(chunks)) return undefined;
-  const isRecord = (chunk: unknown): chunk is Record<string, unknown> =>
-    typeof chunk === "object" && chunk !== null;
-  const referencesId = chunks.some((chunk) => isRecord(chunk) && chunk.name === "id");
-  if (!referencesId) return undefined;
-  // A drizzle Param carries the compared value plus a `brand` and/or `encoder` marker. Which of those
-  // survives depends on the drizzle version and bundler (Metro/Hermes drops `brand`; some builds drop
-  // `encoder`), so accept either. StringChunk SQL fragments carry neither.
-  const param = chunks.find(
-    (chunk) => isRecord(chunk) && "value" in chunk && ("brand" in chunk || "encoder" in chunk),
-  ) as { value?: unknown } | undefined;
-  const value = param?.value;
-  if (typeof value === "string") return value;
-  if (typeof value === "number") return String(value);
-  return undefined;
 }
 
 function noopJobs(): JobScheduler {

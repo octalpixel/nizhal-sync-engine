@@ -706,7 +706,7 @@ describe("sync core", () => {
           return { affectedBuckets: [actor.ownerId] };
         }),
         updateNote: defineMutator({ parse: parseAddNote }, async ({ tx }, args) => {
-          await tx.update(notes).set({ body: args.body }).where(eq(notes.client_id, args.clientId));
+          await tx.update(notes, { client_id: args.clientId }).set({ body: args.body });
           return { affectedBuckets: ["owner-1"] };
         }),
       }),
@@ -802,15 +802,15 @@ describe("sync core", () => {
       schema: { customers: { table: customers, merge: "field" } },
       mutators: defineMutators({
         updateName: defineMutator({ parse: parseCustomerPatch }, async ({ tx }, args) => {
-          await tx.update(customers).set({ name: args.value }).where(eq(customers.id, args.id));
+          await tx.update(customers, { id: args.id }).set({ name: args.value });
           return { affectedBuckets: ["owner-1"] };
         }),
         updatePhone: defineMutator({ parse: parseCustomerPatch }, async ({ tx }, args) => {
-          await tx.update(customers).set({ phone: args.value }).where(eq(customers.id, args.id));
+          await tx.update(customers, { id: args.id }).set({ phone: args.value });
           return { affectedBuckets: ["owner-1"] };
         }),
         updateNote: defineMutator({ parse: parseAddNote }, async ({ tx }, args) => {
-          await tx.update(notes).set({ body: args.body }).where(eq(notes.client_id, args.clientId));
+          await tx.update(notes, { client_id: args.clientId }).set({ body: args.body });
           return { affectedBuckets: ["owner-1"] };
         }),
       }),

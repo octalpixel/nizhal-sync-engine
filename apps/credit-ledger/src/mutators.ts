@@ -119,13 +119,8 @@ export const creditLedgerMutators = defineMutators({
     async ({ tx, actor, location }, args) => {
       const shopId = requireShopId(actor);
       const rows = await tx
-        .update(customers)
-        .set({ name: args.value })
-        .where(
-          location === "server"
-            ? (table) => sql`${table.id} = ${args.customerId} and ${table.shop_id} = ${shopId}`
-            : eq(customers.id, args.customerId),
-        );
+        .update(customers, { id: args.customerId, shop_id: shopId })
+        .set({ name: args.value });
       if (location === "server") requireAffectedRow(rows, "customer");
       return { affectedBuckets: [shopId] };
     },
@@ -136,13 +131,8 @@ export const creditLedgerMutators = defineMutators({
     async ({ tx, actor, location }, args) => {
       const shopId = requireShopId(actor);
       const rows = await tx
-        .update(customers)
-        .set({ phone: args.value })
-        .where(
-          location === "server"
-            ? (table) => sql`${table.id} = ${args.customerId} and ${table.shop_id} = ${shopId}`
-            : eq(customers.id, args.customerId),
-        );
+        .update(customers, { id: args.customerId, shop_id: shopId })
+        .set({ phone: args.value });
       if (location === "server") requireAffectedRow(rows, "customer");
       return { affectedBuckets: [shopId] };
     },
@@ -150,13 +140,7 @@ export const creditLedgerMutators = defineMutators({
 
   deleteCustomer: defineMutator(deleteCustomerInput, async ({ tx, actor, location }, args) => {
     const shopId = requireShopId(actor);
-    const rows = await tx
-      .delete(customers)
-      .where(
-        location === "server"
-          ? (table) => sql`${table.id} = ${args.customerId} and ${table.shop_id} = ${shopId}`
-          : eq(customers.id, args.customerId),
-      );
+    const rows = await tx.delete(customers, { id: args.customerId, shop_id: shopId });
     if (location === "server") requireAffectedRow(rows, "customer");
     return { affectedBuckets: [shopId] };
   }),

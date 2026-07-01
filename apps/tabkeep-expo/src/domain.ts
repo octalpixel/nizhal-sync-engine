@@ -4,7 +4,6 @@ import {
   createNizhalMutators,
   nizhalCollectionOptions,
 } from "@nizhal/db-collection";
-import { createEcho, createOnlineDetector } from "./echo";
 import {
   type SyncRuleBuilder,
   type SyncRules,
@@ -14,8 +13,8 @@ import {
   z,
 } from "@nizhal/kernel";
 import { createCollection } from "@tanstack/db";
-import { eq } from "drizzle-orm";
 import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { createEcho, createOnlineDetector } from "./echo";
 
 // Self-contained copy of the Tabkeep domain (a future @nizhal/tabkeep-core would let web + Expo share
 // this verbatim). The engine packages are the real shared dependency; this is just the table shapes,
@@ -51,35 +50,59 @@ export const tabkeepMutators = defineMutators({
   addCustomer: defineMutator(
     z.object({ id, name: z.string().trim().min(1), phone: z.string().trim().optional() }),
     async ({ tx, ownerId }, args) => {
-      await tx.insert(customers).values({ id: args.id, shop_id: ownerId, name: args.name, phone: args.phone || null });
+      await tx
+        .insert(customers)
+        .values({ id: args.id, shop_id: ownerId, name: args.name, phone: args.phone || null });
       return { serverId: args.id, affectedBuckets: [ownerId] };
     },
   ),
   recordCredit: defineMutator(ledgerInput, async ({ tx, ownerId, now }, args) => {
-    await tx.insert(ledgerEntries).values({ id: args.id, shop_id: ownerId, customer_id: args.customerId, kind: "credit", amount: args.amount, note: args.note || null, created_at: new Date(now()) });
+    await tx.insert(ledgerEntries).values({
+      id: args.id,
+      shop_id: ownerId,
+      customer_id: args.customerId,
+      kind: "credit",
+      amount: args.amount,
+      note: args.note || null,
+      created_at: new Date(now()),
+    });
     return { serverId: args.id, affectedBuckets: [ownerId] };
   }),
   recordPayment: defineMutator(ledgerInput, async ({ tx, ownerId, now }, args) => {
-    await tx.insert(ledgerEntries).values({ id: args.id, shop_id: ownerId, customer_id: args.customerId, kind: "payment", amount: args.amount, note: args.note || null, created_at: new Date(now()) });
+    await tx.insert(ledgerEntries).values({
+      id: args.id,
+      shop_id: ownerId,
+      customer_id: args.customerId,
+      kind: "payment",
+      amount: args.amount,
+      note: args.note || null,
+      created_at: new Date(now()),
+    });
     return { serverId: args.id, affectedBuckets: [ownerId] };
   }),
   // The one edit on a shared field — concurrent renames of the same customer resolve via the table's
   // merge policy (lww). Ledger entries stay append-only, so they can't conflict.
-  renameCustomer: defineMutator(z.object({ id, name: z.string().trim().min(1) }), async ({ tx, ownerId }, args) => {
-    await tx.update(customers).set({ name: args.name }).where(eq(customers.id, args.id));
-    return { serverId: args.id, affectedBuckets: [ownerId] };
-  }),
+  renameCustomer: defineMutator(
+    z.object({ id, name: z.string().trim().min(1) }),
+    async ({ tx, ownerId }, args) => {
+      await tx.update(customers, { id: args.id }).set({ name: args.name });
+      return { serverId: args.id, affectedBuckets: [ownerId] };
+    },
+  ),
 });
 
-export const tabkeepSyncRules = defineSyncRules((b: SyncRuleBuilder): SyncRules => ({
-  myShop: b.bucket({
-    parameters: () => b.params({ ownerId: "shop_id" }),
-    data: (bucket) => [
-      b.table("customers").where(b.eq("shop_id", bucket.ownerId)),
-      b.table("ledger_entries").where(b.eq("shop_id", bucket.ownerId)),
-    ],
-  }),
-}) as unknown as SyncRules);
+export const tabkeepSyncRules = defineSyncRules(
+  (b: SyncRuleBuilder): SyncRules =>
+    ({
+      myShop: b.bucket({
+        parameters: () => b.params({ ownerId: "shop_id" }),
+        data: (bucket) => [
+          b.table("customers").where(b.eq("shop_id", bucket.ownerId)),
+          b.table("ledger_entries").where(b.eq("shop_id", bucket.ownerId)),
+        ],
+      }),
+    }) as unknown as SyncRules,
+);
 
 export async function createTabkeepExpoClient(options: {
   shopId: string;
@@ -103,17 +126,34 @@ export async function createTabkeepExpoClient(options: {
   });
   const persistence = options.persistence?.persistence;
   const customersC = createCollection(
-    nizhalCollectionOptions<CustomerRow>({ name: "customers", syncRule: "myShop", echo, bucketField: "shop_id", getKey: (r) => r.id, persistence }),
+    nizhalCollectionOptions<CustomerRow>({
+      name: "customers",
+      syncRule: "myShop",
+      echo,
+      bucketField: "shop_id",
+      getKey: (r) => r.id,
+      persistence,
+    }),
   ) as NizhalCollection<CustomerRow>;
   const ledgerC = createCollection(
-    nizhalCollectionOptions<LedgerEntryRow>({ name: "ledger_entries", syncRule: "myShop", echo, bucketField: "shop_id", getKey: (r) => r.id, persistence }),
+    nizhalCollectionOptions<LedgerEntryRow>({
+      name: "ledger_entries",
+      syncRule: "myShop",
+      echo,
+      bucketField: "shop_id",
+      getKey: (r) => r.id,
+      persistence,
+    }),
   ) as NizhalCollection<LedgerEntryRow>;
   await Promise.all([customersC.preload(), ledgerC.preload()]);
   // Connectivity detector, platform-picked (NetInfo on native, browser online events on web), wrapped
   // for deterministic manual override — `setOnline(false)` holds the outbox regardless of the network.
   const onlineDetector = createOnlineDetector();
   const mutators = createNizhalMutators({
-    collections: { customers: customersC, ledger_entries: ledgerC } as Record<string, NizhalCollection<object>>,
+    collections: { customers: customersC, ledger_entries: ledgerC } as Record<
+      string,
+      NizhalCollection<object>
+    >,
     echo,
     actor: { userId: options.userId, ownerId: options.shopId },
     mutators: tabkeepMutators,

@@ -216,9 +216,8 @@ const testMutators = {
   }),
   editBody: defineMutator({ parse: parseEditBody }, async ({ tx, actor }, args) => {
     await tx
-      .update(documents)
-      .set({ body: Buffer.from(args.bodyUpdate, "base64") })
-      .where(eq(documents.id, args.documentId));
+      .update(documents, { id: args.documentId })
+      .set({ body: Buffer.from(args.bodyUpdate, "base64") });
     return { affectedBuckets: [actor.ownerId] };
   }),
 };
