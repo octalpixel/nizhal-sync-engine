@@ -21,7 +21,7 @@ export type NizhalStoreCollections<Schema> = {
   >;
 };
 
-export interface OpenNizhalStoreOptions<
+export interface OpenNizhalCollectionsStoreOptions<
   Schema extends Record<string, unknown>,
   M extends AnyMutators,
 > {
@@ -38,7 +38,10 @@ export interface OpenNizhalStoreOptions<
   clientID?: string;
 }
 
-export interface NizhalStore<Schema extends Record<string, unknown>, M extends AnyMutators> {
+export interface NizhalCollectionsStore<
+  Schema extends Record<string, unknown>,
+  M extends AnyMutators,
+> {
   collections: NizhalStoreCollections<Schema>;
   mutate: NizhalMutatorsResult<M>["mutate"];
   onlineDetector: OnlineDetector;
@@ -51,10 +54,10 @@ export interface NizhalStore<Schema extends Record<string, unknown>, M extends A
  * wiring. Derives one collection per synced table (rule + bucket column read from the sync rules),
  * preloads them, and wires the outbox / mutation-id / dead-letter stores + online detector.
  */
-export async function openNizhalStore<
+export async function openNizhalCollectionsStore<
   Schema extends Record<string, unknown>,
   M extends AnyMutators,
->(opts: OpenNizhalStoreOptions<Schema, M>): Promise<NizhalStore<Schema, M>> {
+>(opts: OpenNizhalCollectionsStoreOptions<Schema, M>): Promise<NizhalCollectionsStore<Schema, M>> {
   const synced = describeSyncedTables(opts.syncRules);
   const persistence = opts.persistence?.persistence;
 

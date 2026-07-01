@@ -3,6 +3,18 @@
 **Branch:** `main` (local) → pushed to `nizhal-engine/main` and origin's `fix/sync-engine-data-loss`, both at `de73a1b`. Tree clean.
 **Repo:** `/Users/mithushancj/Documents/personal/echo` (pnpm + turbo monorepo).
 
+## Update (2026-07-02, later) — Arc D: the drizzle-native sync client SHIPPED (X→0)
+
+`rfcs/rfc-drizzle-native-sync-client.md` executed to zero: **`openNizhalStore` is now the
+drizzle-native sync client** — one SQLite file: derived real tables (kernel `deriveSqliteSchema`,
+schema-once) + `nizhal_outbox`/`nizhal_meta`/`nizhal_dead_letter` as drizzle tables; one owned
+push engine (caveat 1 RESOLVED — `@tanstack/offline-transactions` gone from the new plane);
+pull-apply + cursor in one tx; D6 = direct-apply + replay-rebase, PROVEN. New e2e suite vs the
+real server (pglite): 7 ✓ incl. offline-write-survives-restart (the long-skipped scenario) and
+rebase-overwrite. Legacy plane lives on as `openNizhalCollectionsStore` (tabkeep ships on it;
+migrates after release). Gates: kernel 12 · db-collection 116 · server 74 · local 13 ·
+check-types 22/22 · lint 0. Follow-ups in the RFC closeout (pos migration first).
+
 ## Update (2026-07-02 session) — Arc C: `@nizhal/local` (local-only native-Drizzle DX)
 
 Shipped a new standalone package **`@nizhal/local`** (WatermelonDB-class DX for purely local

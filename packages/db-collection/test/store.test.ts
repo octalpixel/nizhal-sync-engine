@@ -2,7 +2,7 @@ import { defineMutator, defineMutators, defineSyncRules } from "@nizhal/kernel";
 import { pgTable, text } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 import { createNizhalClient } from "../src/client.js";
-import { openNizhalStore } from "../src/store.js";
+import { openNizhalCollectionsStore as openNizhalStore } from "../src/store.js";
 
 const customers = pgTable("customers", {
   id: text("id").primaryKey(),

@@ -11,6 +11,8 @@ export type {
   WatchOptions,
 } from "./types.js";
 export { applyBundledMigrations } from "./migrations.js";
+export { createTableWatcher, deriveQueryTables } from "./watcher.js";
+export type { TableWatcher } from "./watcher.js";
 
 /**
  * Open a purely local, migrated, reactive Drizzle database — WatermelonDB-style, but the query

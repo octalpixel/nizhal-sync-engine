@@ -1,4 +1,7 @@
-import { type NizhalSQLitePersistence, openNizhalStore } from "@nizhal/db-collection";
+// Legacy (blob-plane) store on purpose: tabkeep ships its release on the proven plane;
+// it migrates to the drizzle-native openNizhalStore after that release
+// (rfc-local-sync-convergence §10 stage 3).
+import { type NizhalSQLitePersistence, openNizhalCollectionsStore } from "@nizhal/db-collection";
 import { customers, ledgerEntries, tabkeepMutators, tabkeepSyncRules } from "./domain";
 import { createEcho, createOnlineDetector } from "./echo";
 
@@ -28,7 +31,7 @@ export async function createTabkeepExpoClient(options: {
   // Connectivity detector, platform-picked (NetInfo on native, browser online events on web), wrapped
   // for deterministic manual override — `setOnline(false)` holds the outbox regardless of the network.
   const onlineDetector = createOnlineDetector();
-  const store = await openNizhalStore({
+  const store = await openNizhalCollectionsStore({
     echo,
     schema: { customers, ledgerEntries },
     syncRules: tabkeepSyncRules,

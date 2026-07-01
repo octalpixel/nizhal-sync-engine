@@ -29,7 +29,8 @@
     "@tanstack/offline-transactions": "^1.0.37",
     "@tanstack/react-native-db-sqlite-persistence": "^0.2.4",
     "drizzle-orm": "^0.45.2",
-    "yjs": "^13.6.31"
+    "yjs": "^13.6.31",
+    "@nizhal/local": "workspace:*"
   },
   "peerDependencies": {
     "@journeyapps/wa-sqlite": "^1.7.0",

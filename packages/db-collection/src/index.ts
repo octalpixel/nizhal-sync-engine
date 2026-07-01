@@ -22,12 +22,19 @@ export type {
 } from "./sync-target.js";
 export { nizhalCollectionOptions } from "./collection.js";
 export type { NizhalCollection, NizhalCollectionOptions } from "./collection.js";
-export { openNizhalStore } from "./store.js";
+// Legacy blob-plane store (TanStack collections) — kept until the drizzle-native plane fully
+// supersedes it (rfc-drizzle-native-sync-client non-goals).
+export { openNizhalCollectionsStore } from "./store.js";
 export type {
-  NizhalStore,
+  NizhalCollectionsStore,
   NizhalStoreCollections,
-  OpenNizhalStoreOptions,
+  OpenNizhalCollectionsStoreOptions,
 } from "./store.js";
+// The drizzle-native sync client (rfc-drizzle-native-sync-client): real tables, one SQLite file.
+export { openNizhalStore } from "./drizzle/store.js";
+export type { NizhalStore, OpenNizhalStoreOptions } from "./drizzle/store.js";
+export { drizzleMutatorTx } from "./drizzle/mutator-tx.js";
+export { nizhalMeta, nizhalOutbox, nizhalDeadLetter } from "./drizzle/control-schema.js";
 export { openNizhalClientGroup } from "./client-group.js";
 export type {
   NizhalClientGroup,
