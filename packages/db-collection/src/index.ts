@@ -38,6 +38,12 @@ export type {
   SharedMutation,
 } from "./client-group.js";
 export {
+  browserCoordinator,
+  browserOnlineGate,
+  localStorageMeta,
+  localStorageOutbox,
+} from "./client-group-browser.js";
+export {
   kvSessionStore,
   localStorageSessionStore,
   startLocalFirstBootstrap,
