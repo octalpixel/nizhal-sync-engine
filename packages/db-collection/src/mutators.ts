@@ -404,8 +404,12 @@ export function createNizhalMutators<M extends Record<string, NizhalMutatorDefin
     storage: MutationIdStorage,
     idempotencyKey: string,
     lastMutationId: number,
+    authoritative: boolean,
   ): Promise<number> {
-    serverHighWater = Math.max(serverHighWater, lastMutationId);
+    // A 409 out-of-order is the server *authoritatively* stating its sequence position, so trust it
+    // even downward: otherwise a stale/replayed response that inflated serverHighWater would pin the
+    // client above the server's true sequence forever, and the mutation could never converge.
+    serverHighWater = authoritative ? lastMutationId : Math.max(serverHighWater, lastMutationId);
     const mutationID = allocateMutationId(serverHighWater, 0);
     await writeAllocatedMutationId(storage, idempotencyKey, mutationID);
     localHighWater = mutationID;
@@ -488,6 +492,7 @@ export function createNizhalMutators<M extends Record<string, NizhalMutatorDefin
             mutationIdStore,
             idempotencyKey,
             response.lastMutationId,
+            response?.outOfOrder === true,
           );
           continue;
         }
