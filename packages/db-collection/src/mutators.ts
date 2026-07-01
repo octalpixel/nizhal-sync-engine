@@ -657,21 +657,24 @@ function keyFromPredicate<TTable extends Table>(
   return key;
 }
 
+// Pull the row key out of an `eq(table.id, value)` predicate for the optimistic client update.
+// This reads drizzle's private queryChunks, whose exact shape varies across drizzle versions and
+// bundlers (Metro/Hermes), so identify parts by stable, structural signals: the id column by its
+// `name` getter, and the compared value by the drizzle Param (uniquely the chunk carrying an
+// `encoder`; StringChunk SQL fragments never have one).
 function extractSimpleIdEquality(predicate: SQLWrapper): string | undefined {
   const chunks = (predicate as { queryChunks?: unknown[] }).queryChunks;
-  if (!chunks) return undefined;
-  const column = chunks.find(
-    (chunk): chunk is { name: string } =>
-      typeof chunk === "object" &&
-      chunk !== null &&
-      "name" in chunk &&
-      (chunk as { name?: unknown }).name === "id",
-  );
+  if (!Array.isArray(chunks)) return undefined;
+  const isRecord = (chunk: unknown): chunk is Record<string, unknown> =>
+    typeof chunk === "object" && chunk !== null;
+  const referencesId = chunks.some((chunk) => isRecord(chunk) && chunk.name === "id");
+  if (!referencesId) return undefined;
+  // A drizzle Param carries the compared value plus a `brand` and/or `encoder` marker. Which of those
+  // survives depends on the drizzle version and bundler (Metro/Hermes drops `brand`; some builds drop
+  // `encoder`), so accept either. StringChunk SQL fragments carry neither.
   const param = chunks.find(
-    (chunk): chunk is { value: unknown } =>
-      typeof chunk === "object" && chunk !== null && "value" in chunk && "brand" in chunk,
-  );
-  if (!column) return undefined;
+    (chunk) => isRecord(chunk) && "value" in chunk && ("brand" in chunk || "encoder" in chunk),
+  ) as { value?: unknown } | undefined;
   const value = param?.value;
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
