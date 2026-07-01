@@ -19,3 +19,8 @@ coverage/
 **/.wrangler/
 .dev.vars
 .agents/
+
+# vendored third-party sync-engine clones used for research comparison (not our code — do not commit)
+research/lunora/
+research/replicache/
+research/zero-mono/
