@@ -20,7 +20,7 @@
     "build": "tsc -p tsconfig.json",
     "check-types": "tsc -p tsconfig.json --noEmit",
     "test:local-first": "vitest run test/local-first.test.ts",
-    "test:browser": "node test/browser/cross-tab.mjs",
+    "serve:browser-harness": "node test/browser/serve.mjs",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
@@ -53,8 +53,6 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/ws": "^8.18.1",
     "better-sqlite3": "^12.11.1",
-    "esbuild": "^0.25.12",
-    "playwright": "^1.61.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
     "wa-sqlite": "^1.0.0",
