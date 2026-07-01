@@ -1,9 +1,4 @@
-import {
-  type NizhalCollection,
-  type NizhalSQLitePersistence,
-  createNizhalMutators,
-  nizhalCollectionOptions,
-} from "@nizhal/db-collection";
+import { type NizhalSQLitePersistence, openNizhalStore } from "@nizhal/db-collection";
 import {
   type SyncRuleBuilder,
   type SyncRules,
@@ -12,7 +7,6 @@ import {
   defineSyncRules,
   z,
 } from "@nizhal/kernel";
-import { createCollection } from "@tanstack/db";
 import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createEcho, createOnlineDetector } from "./echo";
 
@@ -124,52 +118,26 @@ export async function createTabkeepExpoClient(options: {
     refreshToken: options.refreshToken,
     bucketsForSyncRule: (rule) => (rule === "myShop" ? [options.shopId] : []),
   });
-  const persistence = options.persistence?.persistence;
-  const customersC = createCollection(
-    nizhalCollectionOptions<CustomerRow>({
-      name: "customers",
-      syncRule: "myShop",
-      echo,
-      bucketField: "shop_id",
-      getKey: (r) => r.id,
-      persistence,
-    }),
-  ) as NizhalCollection<CustomerRow>;
-  const ledgerC = createCollection(
-    nizhalCollectionOptions<LedgerEntryRow>({
-      name: "ledger_entries",
-      syncRule: "myShop",
-      echo,
-      bucketField: "shop_id",
-      getKey: (r) => r.id,
-      persistence,
-    }),
-  ) as NizhalCollection<LedgerEntryRow>;
-  await Promise.all([customersC.preload(), ledgerC.preload()]);
   // Connectivity detector, platform-picked (NetInfo on native, browser online events on web), wrapped
   // for deterministic manual override — `setOnline(false)` holds the outbox regardless of the network.
   const onlineDetector = createOnlineDetector();
-  const mutators = createNizhalMutators({
-    collections: { customers: customersC, ledger_entries: ledgerC } as Record<
-      string,
-      NizhalCollection<object>
-    >,
+  // One primitive assembles the whole client store from the schema + sync rules + mutators. The
+  // platform still owns transport (`createEcho`) and the connectivity detector above.
+  const store = await openNizhalStore({
     echo,
-    actor: { userId: options.userId, ownerId: options.shopId },
+    schema: { customers, ledgerEntries },
+    syncRules: tabkeepSyncRules,
     mutators: tabkeepMutators,
-    outboxStorage: options.persistence?.outboxStorage,
-    mutationIdStorage: options.persistence?.metaStorage,
-    deadLetterStorage: options.persistence?.deadLetterStorage,
-    clientID: options.persistence?.clientId,
+    actor: { userId: options.userId, ownerId: options.shopId },
+    persistence: options.persistence,
     onlineDetector,
   });
-  await mutators.executor.waitForInit();
   return {
-    customers: customersC,
-    ledgerEntries: ledgerC,
-    mutate: mutators.mutate,
+    customers: store.collections.customers,
+    ledgerEntries: store.collections.ledgerEntries,
+    mutate: store.mutate,
     onlineDetector,
-    dispose: mutators.dispose,
+    dispose: store.dispose,
   };
 }
 

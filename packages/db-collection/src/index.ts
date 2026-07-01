@@ -22,6 +22,12 @@ export type {
 } from "./sync-target.js";
 export { nizhalCollectionOptions } from "./collection.js";
 export type { NizhalCollection, NizhalCollectionOptions } from "./collection.js";
+export { openNizhalStore } from "./store.js";
+export type {
+  NizhalStore,
+  NizhalStoreCollections,
+  OpenNizhalStoreOptions,
+} from "./store.js";
 export {
   presence,
   subscribePresence,

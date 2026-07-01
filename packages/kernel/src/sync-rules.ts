@@ -182,6 +182,29 @@ export function collectSyncRuleTables(
   return tables;
 }
 
+// Per-table view of the sync rules for client assembly: which rule owns a table and which columns
+// scope it to a bucket. `collectSyncRuleTables` drops the owning rule name (it merges across rules);
+// the client store needs it to open one collection per table with the right `syncRule` + `bucketField`.
+export function describeSyncedTables(
+  rules: SyncRules,
+): Map<string, { syncRule: string; bucketColumns: string[] }> {
+  assertSyncRulesNoLeak(rules);
+  const tables = new Map<string, { syncRule: string; bucketColumns: string[] }>();
+  for (const [ruleName, rule] of Object.entries(rules)) {
+    for (const query of flattenDataQueries(rule.data(bucketProxy(rule.bucketColumns ?? [])))) {
+      const columns = query.predicates.map((predicate) => predicate.column);
+      const existing = tables.get(query.table);
+      if (existing) {
+        for (const column of columns)
+          if (!existing.bucketColumns.includes(column)) existing.bucketColumns.push(column);
+      } else {
+        tables.set(query.table, { syncRule: ruleName, bucketColumns: columns });
+      }
+    }
+  }
+  return tables;
+}
+
 export function flattenDataQueries(queries: readonly Query[]): Query[] {
   const flattened: Query[] = [];
   for (const query of queries) {
