@@ -20,6 +20,7 @@ import {
   formatMinorUnits,
 } from "./src/domain";
 import { openTabkeepPersistence } from "./src/persistence";
+import { type CachedSession, loadSession, saveSession } from "./src/session";
 
 // EXPO_PUBLIC_APP=chat renders the Nizhal chat client (same hosted server); default is the ledger.
 export default function App() {
@@ -44,49 +45,81 @@ function parseMinor(input: string): number | null {
   return Number.isSafeInteger(v) && v > 0 ? v : null;
 }
 
+async function fetchSession(): Promise<CachedSession> {
+  const res = await fetch(`${SERVER}/demo/session`);
+  if (!res.ok) throw new Error(`demo session ${res.status}`);
+  const s = (await res.json()) as { shopId: string; userId: string; token: string };
+  return { shopId: s.shopId, userId: s.userId, token: s.token };
+}
+
 function LedgerApp() {
   const [client, setClient] = useState<Client | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [needsConnection, setNeedsConnection] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let opened: Client | null = null;
+
+    const openClient = async (session: CachedSession) => {
+      const c = await createTabkeepExpoClient({
+        shopId: session.shopId,
+        userId: session.userId,
+        server: SERVER,
+        realtimeHost: REALTIME_HOST,
+        token: session.token,
+        // Each token refresh (on 401) re-caches the session, so the next offline boot has a fresh token.
+        refreshToken: async () => {
+          const fresh = await fetchSession();
+          await saveSession(fresh);
+          return fresh.token;
+        },
+        persistence: await openTabkeepPersistence(),
+      });
+      if (cancelled) {
+        void c.dispose();
+        return;
+      }
+      opened = c;
+      setClient(c);
+      setNeedsConnection(false);
+    };
+
     (async () => {
-      try {
-        const res = await fetch(`${SERVER}/demo/session`);
-        if (!res.ok) throw new Error(`demo session ${res.status}`);
-        const session = (await res.json()) as { shopId: string; userId: string; token: string };
-        const persistence = await openTabkeepPersistence();
-        opened = await createTabkeepExpoClient({
-          shopId: session.shopId,
-          userId: session.userId,
-          server: SERVER,
-          realtimeHost: REALTIME_HOST,
-          token: session.token,
-          refreshToken: async () => {
-            const r = await fetch(`${SERVER}/demo/session`);
-            if (!r.ok) throw new Error(`demo session ${r.status}`);
-            return ((await r.json()) as { token: string }).token;
-          },
-          persistence,
-        });
-        if (!cancelled) setClient(opened);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      // 1. Local-first: with a cached session, open the local replica IMMEDIATELY — works fully offline.
+      const cached = await loadSession();
+      if (cached && !cancelled) await openClient(cached);
+
+      // 2. Background: refresh the session without ever blocking the local UI. With a cached session we
+      //    try once (the live client self-heals via auth.refresh on reconnect); on a first-ever launch
+      //    with no cache we retry until the server is first reachable, then open.
+      while (!cancelled) {
+        try {
+          const fresh = await fetchSession();
+          await saveSession(fresh);
+          if (!cached && !cancelled) await openClient(fresh);
+          break;
+        } catch {
+          if (cached) break;
+          setNeedsConnection(true);
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
       }
     })();
+
     return () => {
       cancelled = true;
       void opened?.dispose();
     };
   }, []);
 
-  if (error) {
+  if (needsConnection && !client) {
     return (
       <SafeAreaView style={styles.center}>
         <Text style={styles.brand}>Tabkeep</Text>
-        <Text style={styles.error}>Could not open the ledger</Text>
-        <Text style={styles.muted}>{error}</Text>
+        <Text style={styles.muted}>Connect once to set up this device.</Text>
+        <Text style={styles.muted}>
+          You’re offline — the ledger opens here automatically the first time it reaches the server.
+        </Text>
         <StatusBar style="auto" />
       </SafeAreaView>
     );
