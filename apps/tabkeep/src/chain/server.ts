@@ -1,8 +1,8 @@
 import type { MutatorRegistry } from "@nizhal/kernel";
 import { bearerTokenAuth, createNizhalServer, signHs256Jwt } from "@nizhal/server";
 import type { BlobAdapter, RealtimeAdapter, StorageAdapter } from "@nizhal/server/adapters";
-import type { ChainRole } from "./schema.js";
 import { chainMutators } from "./mutators.js";
+import type { ChainRole } from "./schema.js";
 import { chainSchema } from "./schema.js";
 import { chainSyncRules } from "./sync-rules.js";
 

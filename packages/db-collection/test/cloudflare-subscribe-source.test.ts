@@ -74,10 +74,7 @@ describe("createCloudflareSubscribeSource", () => {
   it("delivers string frames to onMessage and fires onReconnect on a re-open", async () => {
     const received: string[] = [];
     const onReconnect = vi.fn();
-    const source = createCloudflareSubscribeSource(
-      "https://realtime.example.com",
-      async () => "t",
-    );
+    const source = createCloudflareSubscribeSource("https://realtime.example.com", async () => "t");
     source.subscribe(["a"], (d) => received.push(d), onReconnect);
     await flush();
 
@@ -113,7 +110,9 @@ describe("createCloudflareSubscribeSource", () => {
     source.subscribe(["a"], () => {});
     await flush();
     expect(used).toBe(1);
-    expect(FakeWebSocket.instances[0].url).toBe("ws://127.0.0.1:8787/parties/nizhal-bucket/a?token=t");
+    expect(FakeWebSocket.instances[0].url).toBe(
+      "ws://127.0.0.1:8787/parties/nizhal-bucket/a?token=t",
+    );
   });
 
   it("unsubscribe closes every per-bucket socket and stops reconnecting", async () => {

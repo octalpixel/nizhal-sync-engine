@@ -134,7 +134,7 @@ header {
   font-size: 13px;
   cursor: pointer;
   background: #1c1f27;
-  font: inherit;
+  font-family: inherit;
 }
 .netOnline {
   color: #34d399;
@@ -166,5 +166,5 @@ header {
   padding: 4px 12px;
   font-weight: 700;
   cursor: pointer;
-  font: inherit;
+  font-family: inherit;
 }

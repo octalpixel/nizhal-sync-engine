@@ -1093,7 +1093,9 @@ function bigintToXid8Statements(input: ProvisionInput): string[] {
 
   // 1. Drop the defaults that hard-depend on the bigint version function so it can be replaced.
   for (const t of tables) {
-    stmts.push(`alter table ${quoteIdentifier(t.table)} alter column _nizhal_row_version drop default`);
+    stmts.push(
+      `alter table ${quoteIdentifier(t.table)} alter column _nizhal_row_version drop default`,
+    );
   }
   stmts.push("alter table _nizhal_tombstones alter column row_version drop default");
   if (withAudit) stmts.push("alter table _nizhal_audit_log alter column row_version drop default");
@@ -1109,21 +1111,35 @@ as $$ select pg_current_xact_id() $$`);
   // 3. Convert every row-version column bigint → xid8 (numeric text is a valid xid8 literal) + re-default.
   for (const t of tables) {
     const n = quoteIdentifier(t.table);
-    stmts.push(`alter table ${n} alter column _nizhal_row_version type xid8 using _nizhal_row_version::text::xid8`);
-    stmts.push(`alter table ${n} alter column _nizhal_row_version set default _nizhal_next_row_version()`);
+    stmts.push(
+      `alter table ${n} alter column _nizhal_row_version type xid8 using _nizhal_row_version::text::xid8`,
+    );
+    stmts.push(
+      `alter table ${n} alter column _nizhal_row_version set default _nizhal_next_row_version()`,
+    );
   }
-  stmts.push("alter table _nizhal_tombstones alter column row_version type xid8 using row_version::text::xid8");
-  stmts.push("alter table _nizhal_tombstones alter column row_version set default _nizhal_next_row_version()");
+  stmts.push(
+    "alter table _nizhal_tombstones alter column row_version type xid8 using row_version::text::xid8",
+  );
+  stmts.push(
+    "alter table _nizhal_tombstones alter column row_version set default _nizhal_next_row_version()",
+  );
   if (withAudit) {
-    stmts.push("alter table _nizhal_audit_log alter column row_version type xid8 using row_version::text::xid8");
-    stmts.push("alter table _nizhal_audit_log alter column row_version set default _nizhal_next_row_version()");
+    stmts.push(
+      "alter table _nizhal_audit_log alter column row_version type xid8 using row_version::text::xid8",
+    );
+    stmts.push(
+      "alter table _nizhal_audit_log alter column row_version set default _nizhal_next_row_version()",
+    );
   }
 
   // 4. Retire the global sequence and the UNIQUE tombstone index (rows of one txn now share its xid).
   stmts.push("drop sequence if exists _nizhal_row_version_seq");
   stmts.push("drop index if exists _nizhal_tombstones_row_version_key");
   stmts.push("drop index if exists _nizhal_tombstones_row_version_idx");
-  stmts.push("create index if not exists _nizhal_tombstones_row_version_idx on _nizhal_tombstones (row_version)");
+  stmts.push(
+    "create index if not exists _nizhal_tombstones_row_version_idx on _nizhal_tombstones (row_version)",
+  );
   return stmts;
 }
 
@@ -1169,8 +1185,12 @@ export function buildResetStatements(input: ProvisionInput): string[] {
       stmts.push(
         `drop trigger if exists ${quoteIdentifier(`_nizhal_remove_${t.table}_${bucketColumn}_trg`)} on ${n}`,
       );
-      stmts.push(`drop function if exists ${quoteIdentifier(`_nizhal_remove_${t.table}_${bucketColumn}`)}()`);
-      stmts.push(`drop index if exists ${quoteIdentifier(`_nizhal_${t.table}_${bucketColumn}_row_version_idx`)}`);
+      stmts.push(
+        `drop function if exists ${quoteIdentifier(`_nizhal_remove_${t.table}_${bucketColumn}`)}()`,
+      );
+      stmts.push(
+        `drop index if exists ${quoteIdentifier(`_nizhal_${t.table}_${bucketColumn}_row_version_idx`)}`,
+      );
     }
     stmts.push(`alter table ${n} drop column if exists _nizhal_row_version`);
     if (t.merge === "field") stmts.push(`alter table ${n} drop column if exists _meta`);

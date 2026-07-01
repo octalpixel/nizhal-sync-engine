@@ -21,7 +21,10 @@ export type NizhalStoreCollections<Schema> = {
   >;
 };
 
-export interface OpenNizhalStoreOptions<Schema extends Record<string, unknown>, M extends AnyMutators> {
+export interface OpenNizhalStoreOptions<
+  Schema extends Record<string, unknown>,
+  M extends AnyMutators,
+> {
   echo: NizhalClient;
   /** The drizzle schema module. Every table export it holds must be covered by a sync rule. */
   schema: Schema;
@@ -48,9 +51,10 @@ export interface NizhalStore<Schema extends Record<string, unknown>, M extends A
  * wiring. Derives one collection per synced table (rule + bucket column read from the sync rules),
  * preloads them, and wires the outbox / mutation-id / dead-letter stores + online detector.
  */
-export async function openNizhalStore<Schema extends Record<string, unknown>, M extends AnyMutators>(
-  opts: OpenNizhalStoreOptions<Schema, M>,
-): Promise<NizhalStore<Schema, M>> {
+export async function openNizhalStore<
+  Schema extends Record<string, unknown>,
+  M extends AnyMutators,
+>(opts: OpenNizhalStoreOptions<Schema, M>): Promise<NizhalStore<Schema, M>> {
   const synced = describeSyncedTables(opts.syncRules);
   const persistence = opts.persistence?.persistence;
 
@@ -64,8 +68,7 @@ export async function openNizhalStore<Schema extends Record<string, unknown>, M 
     const info = synced.get(tableName);
     if (!info) {
       throw new Error(
-        `[@nizhal] openNizhalStore: table '${tableName}' is in the store schema but no sync rule ` +
-          "covers it — remove it from the client schema or add it to a sync rule",
+        `[@nizhal] openNizhalStore: table '${tableName}' is in the store schema but no sync rule covers it — remove it from the client schema or add it to a sync rule`,
       );
     }
     const bucketField = info.bucketColumns[0];

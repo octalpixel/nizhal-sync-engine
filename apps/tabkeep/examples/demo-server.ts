@@ -16,13 +16,23 @@ await db.exec(TABKEEP_DDL);
 await storage.provision({ schema: tabkeepSchema, syncRules: tabkeepSyncRules });
 
 // CORS on so cross-origin browser clients (e.g. the Expo web app on :8081) can reach this API.
-const server = createTabkeepServer({ db: "postgres://unused", secret: SECRET, storage, cors: true });
+const server = createTabkeepServer({
+  db: "postgres://unused",
+  secret: SECRET,
+  storage,
+  cors: true,
+});
 server.app.get("/demo/session", (context) =>
   context.json({
     shopId: SHOP_ID,
     userId: USER_ID,
     // Long-lived for the local demo so a long-running tab/app session doesn't 401 mid-demo.
-    token: issueBearerToken({ secret: SECRET, userId: USER_ID, ownerId: SHOP_ID, expiresInSec: 86_400 }),
+    token: issueBearerToken({
+      secret: SECRET,
+      userId: USER_ID,
+      ownerId: SHOP_ID,
+      expiresInSec: 86_400,
+    }),
   }),
 );
 

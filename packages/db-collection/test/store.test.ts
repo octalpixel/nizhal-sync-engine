@@ -67,7 +67,10 @@ describe("openNizhalStore", () => {
 
     store.mutate.addCustomer({ id: "c1", name: "Alice" });
     await waitFor(() => store.collections.customers.get("c1")?.name === "Alice");
-    expect(store.collections.customers.get("c1")).toMatchObject({ shop_id: "shop-1", name: "Alice" });
+    expect(store.collections.customers.get("c1")).toMatchObject({
+      shop_id: "shop-1",
+      name: "Alice",
+    });
 
     store.mutate.renameCustomer({ id: "c1", name: "Alicia" });
     await waitFor(() => store.collections.customers.get("c1")?.name === "Alicia");

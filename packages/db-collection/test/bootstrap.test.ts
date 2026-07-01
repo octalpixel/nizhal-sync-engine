@@ -11,7 +11,9 @@ interface FakeClient {
   dispose(): void;
 }
 
-function memSessionStore(initial: Session | null): NizhalSessionStore<Session> & { saved: Session | null } {
+function memSessionStore(
+  initial: Session | null,
+): NizhalSessionStore<Session> & { saved: Session | null } {
   const state = { current: initial, saved: null as Session | null };
   return {
     get saved() {
@@ -91,9 +93,17 @@ describe("startLocalFirstBootstrap", () => {
       fetchSession: async () => FRESH,
       openStore: async (session) => {
         await delay(30);
-        return { session, disposed: false, dispose: () => (disposed = true) };
+        return {
+          session,
+          disposed: false,
+          dispose: () => {
+            disposed = true;
+          },
+        };
       },
-      onOpen: () => (opened = true),
+      onOpen: () => {
+        opened = true;
+      },
     });
 
     await delay(5); // let load() resolve and openStore begin (30ms in flight)

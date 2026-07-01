@@ -121,37 +121,31 @@ const relMutators = defineMutators({
       commentBody: z.string().min(1),
     }),
     async ({ tx, actor }, a) => {
-      await tx
-        .insert(issues)
-        .values({
-          id: a.id,
-          workspace_id: a.workspaceId,
-          project_id: a.projectId ?? null,
-          parent_issue_id: null,
-          number: a.number,
-          title: a.title,
-          author_id: actor.userId,
-        });
+      await tx.insert(issues).values({
+        id: a.id,
+        workspace_id: a.workspaceId,
+        project_id: a.projectId ?? null,
+        parent_issue_id: null,
+        number: a.number,
+        title: a.title,
+        author_id: actor.userId,
+      });
       for (const labelId of a.labelIds) {
-        await tx
-          .insert(issueLabels)
-          .values({
-            id: `${a.id}:${labelId}`,
-            workspace_id: a.workspaceId,
-            issue_id: a.id,
-            label_id: labelId,
-          });
-      }
-      await tx
-        .insert(comments)
-        .values({
-          id: a.commentId,
+        await tx.insert(issueLabels).values({
+          id: `${a.id}:${labelId}`,
           workspace_id: a.workspaceId,
           issue_id: a.id,
-          parent_comment_id: null,
-          body: a.commentBody,
-          author_id: actor.userId,
+          label_id: labelId,
         });
+      }
+      await tx.insert(comments).values({
+        id: a.commentId,
+        workspace_id: a.workspaceId,
+        issue_id: a.id,
+        parent_comment_id: null,
+        body: a.commentBody,
+        author_id: actor.userId,
+      });
       return { serverId: a.id, affectedBuckets: [a.workspaceId] };
     },
   ),
@@ -164,16 +158,14 @@ const relMutators = defineMutators({
       body: z.string().min(1),
     }),
     async ({ tx, actor }, a) => {
-      await tx
-        .insert(comments)
-        .values({
-          id: a.id,
-          workspace_id: a.workspaceId,
-          issue_id: a.issueId,
-          parent_comment_id: a.parentCommentId,
-          body: a.body,
-          author_id: actor.userId,
-        });
+      await tx.insert(comments).values({
+        id: a.id,
+        workspace_id: a.workspaceId,
+        issue_id: a.issueId,
+        parent_comment_id: a.parentCommentId,
+        body: a.body,
+        author_id: actor.userId,
+      });
       return { serverId: a.id, affectedBuckets: [a.workspaceId] };
     },
   ),
@@ -236,11 +228,11 @@ async function makeClient(opts: {
     ) as NizhalCollection<AnyRow>;
   // NB: the collections map MUST be keyed by the drizzle TABLE NAME — the client mutator ctx resolves
   // `tx.insert(table)` to a collection via getTableName(table).
-  const projects = coll("rg_projects"),
-    labels = coll("rg_labels"),
-    issues = coll("rg_issues"),
-    issueLabels = coll("rg_issue_labels"),
-    comments = coll("rg_comments");
+  const projects = coll("rg_projects");
+  const labels = coll("rg_labels");
+  const issues = coll("rg_issues");
+  const issueLabels = coll("rg_issue_labels");
+  const comments = coll("rg_comments");
   await Promise.all([projects, labels, issues, issueLabels, comments].map((x) => x.preload()));
   const onlineDetector = manualOnlineDetector();
   const m = createNizhalMutators({
@@ -294,8 +286,8 @@ async function main() {
   const t0 = Date.now();
   const step = (m: string) => {
     const l = `[${((Date.now() - t0) / 1000).toFixed(1)}s] ${m}`;
-    console.log("  " + l);
-    appendFileSync(PROGRESS, l + "\n");
+    console.log(`  ${l}`);
+    appendFileSync(PROGRESS, `${l}\n`);
   };
   const sql = postgres(url, { max: 8, onnotice: () => {} });
   const storage = postgresStorage({ connectionString: url });
@@ -388,7 +380,7 @@ async function main() {
   });
 
   console.log(
-    `  offline: alice queued i1(+2 labels,+comment)+i2+reply+blocking; bob queued i3 (number=1 COLLISION)`,
+    "  offline: alice queued i1(+2 labels,+comment)+i2+reply+blocking; bob queued i3 (number=1 COLLISION)",
   );
 
   // ── RECONNECT ──
@@ -507,7 +499,7 @@ async function main() {
   listener.close();
   await sql.end({ timeout: 5 });
 
-  console.log(`\n──────── RELATIONSHIP-HEAVY RESULT (REAL NEON POSTGRES) ────────`);
+  console.log("\n──────── RELATIONSHIP-HEAVY RESULT (REAL NEON POSTGRES) ────────");
   console.log(
     `integrity=${dangling.length === 0 ? "ok" : "DANGLING"} cascade=${cascadeOk ? "ok" : "LOST"} numberCollision=${dbNums.length > 0 ? "YES(bug)" : "none"} convergence=${allIssues ? "ok" : "LOST"} g1Graph=${daveW.length === 0 ? "CONFIRMED" : "ok"}`,
   );

@@ -93,7 +93,12 @@ async function reproG1(): Promise<boolean> {
   const storage = db.storage;
   const realtime = inProcessRealtime();
   await provisionChat(db);
-  const server = createChatServer({ db: process.env.DATABASE_URL ?? "postgres://unused", secret: SECRET, storage, realtime });
+  const server = createChatServer({
+    db: process.env.DATABASE_URL ?? "postgres://unused",
+    secret: SECRET,
+    storage,
+    realtime,
+  });
   const listener = server.listen(0);
   await new Promise<void>((r) => listener.once("listening", () => r()));
   const port = (listener.address() as { port: number }).port;
@@ -104,7 +109,12 @@ async function reproG1(): Promise<boolean> {
 
   // A owns both channels (so A may post to both); B starts a member of X only.
   const admin = await createChatClient({
-    server: baseUrl, token: tokenA, userId: A, workspaceId: WS, channelIds: [CH_X, CH_Y], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: A,
+    workspaceId: WS,
+    channelIds: [CH_X, CH_Y],
+    subscribeSource: src,
   });
   admin.mutate.createChannel({ id: CH_X, workspaceId: WS, name: "x" });
   admin.mutate.createChannel({ id: CH_Y, workspaceId: WS, name: "y" });
@@ -122,11 +132,18 @@ async function reproG1(): Promise<boolean> {
   // B joins with a MUTABLE channelIds array so "joining Y" doesn't reset the cursor.
   const bChannels = [CH_X];
   const deviceB = await createChatClient({
-    server: baseUrl, token: tokenB, userId: B, workspaceId: WS, channelIds: bChannels, subscribeSource: src,
+    server: baseUrl,
+    token: tokenB,
+    userId: B,
+    workspaceId: WS,
+    channelIds: bChannels,
+    subscribeSource: src,
   });
   await pullChannel(deviceB); // B (member of X) pulls → gets x1 → cursor now > y1,y2 versions
   const beforeJoin = channelMessages(deviceB, CH_Y);
-  console.log(`  B sees in X: [${channelMessages(deviceB, CH_X)}], in Y (not yet joined): [${beforeJoin}]`);
+  console.log(
+    `  B sees in X: [${channelMessages(deviceB, CH_X)}], in Y (not yet joined): [${beforeJoin}]`,
+  );
 
   // ── B JOINS Y (membership added server-side; client adds Y to its synced buckets) ──
   admin.mutate.joinChannel({ workspaceId: WS, channelId: CH_Y, userId: B });
@@ -146,7 +163,8 @@ async function reproG1(): Promise<boolean> {
 
   // Ground truth: the server DOES have y1,y2,y3 (so any miss is a sync bug, not missing data).
   const serverY = await db.query<{ id: string }>(
-    "select id from messages where channel_id = $1 order by id", [CH_Y],
+    "select id from messages where channel_id = $1 order by id",
+    [CH_Y],
   );
   console.log(`  Server has in Y: [${serverY.rows.map((r) => r.id).join(",")}]`);
 
@@ -182,7 +200,12 @@ async function reproB1(): Promise<boolean> {
     subscribe: (buckets, socket) => base.subscribe(buckets, socket),
   };
   await provisionChat(db);
-  const server = createChatServer({ db: process.env.DATABASE_URL ?? "postgres://unused", secret: SECRET, storage, realtime });
+  const server = createChatServer({
+    db: process.env.DATABASE_URL ?? "postgres://unused",
+    secret: SECRET,
+    storage,
+    realtime,
+  });
   const listener = server.listen(0);
   await new Promise<void>((r) => listener.once("listening", () => r()));
   const port = (listener.address() as { port: number }).port;
@@ -191,17 +214,32 @@ async function reproB1(): Promise<boolean> {
   const tokenA = issueBearerToken({ secret: SECRET, userId: A, ownerId: WS });
 
   const admin = await createChatClient({
-    server: baseUrl, token: tokenA, userId: A, workspaceId: WS, channelIds: [CH_X], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: A,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: src,
   });
   admin.mutate.createChannel({ id: CH_X, workspaceId: WS, name: "x" });
   admin.mutate.joinChannel({ workspaceId: WS, channelId: CH_X, userId: B });
   await admin.waitForIdle();
 
   const deviceA = await createChatClient({
-    server: baseUrl, token: tokenA, userId: A, workspaceId: WS, channelIds: [CH_X], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: A,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: src,
   });
   const deviceB = await createChatClient({
-    server: baseUrl, token: tokenA, userId: B, workspaceId: WS, channelIds: [CH_X], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: B,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: src,
   });
   await pullChannel(deviceA);
   await pullChannel(deviceB);
@@ -219,11 +257,14 @@ async function reproB1(): Promise<boolean> {
   await new Promise((r) => setTimeout(r, 300));
 
   const onServer = await db.query<{ count: number }>(
-    "select count(*)::int as count from messages where id = $1", ["m-fail"],
+    "select count(*)::int as count from messages where id = $1",
+    ["m-fail"],
   );
   const committed = (onServer.rows[0]?.count ?? 0) === 1;
   const bGotItLive = deviceB.messages.toArray.some((m) => m.id === "m-fail");
-  console.log(`  committed on server: ${committed}; B received it LIVE (no manual pull): ${bGotItLive}; push surfaced error: ${pushError !== null}`);
+  console.log(
+    `  committed on server: ${committed}; B received it LIVE (no manual pull): ${bGotItLive}; push surfaced error: ${pushError !== null}`,
+  );
 
   // Now prove it's recoverable only by an INDEPENDENT pull (eventual consistency), not the live path.
   await pullChannel(deviceB);
@@ -235,7 +276,9 @@ async function reproB1(): Promise<boolean> {
   await db.close();
 
   if (committed && !bGotItLive) {
-    console.log("  🔴 B1 CONFIRMED — write committed but the live broadcast was dropped (recovered only by a later pull).");
+    console.log(
+      "  🔴 B1 CONFIRMED — write committed but the live broadcast was dropped (recovered only by a later pull).",
+    );
     return true;
   }
   console.log("  ✅ B1 NOT reproduced — the live broadcast survived a publish failure.");
@@ -249,7 +292,12 @@ async function reproC1(): Promise<boolean> {
   const storage = db.storage;
   const realtime = inProcessRealtime();
   await provisionChat(db);
-  const server = createChatServer({ db: process.env.DATABASE_URL ?? "postgres://unused", secret: SECRET, storage, realtime });
+  const server = createChatServer({
+    db: process.env.DATABASE_URL ?? "postgres://unused",
+    secret: SECRET,
+    storage,
+    realtime,
+  });
   const listener = server.listen(0);
   await new Promise<void>((r) => listener.once("listening", () => r()));
   const port = (listener.address() as { port: number }).port;
@@ -258,17 +306,32 @@ async function reproC1(): Promise<boolean> {
   const tokenA = issueBearerToken({ secret: SECRET, userId: A, ownerId: WS });
 
   const admin = await createChatClient({
-    server: baseUrl, token: tokenA, userId: A, workspaceId: WS, channelIds: [CH_X], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: A,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: src,
   });
   admin.mutate.createChannel({ id: CH_X, workspaceId: WS, name: "x" });
   admin.mutate.joinChannel({ workspaceId: WS, channelId: CH_X, userId: B });
   await admin.waitForIdle();
 
   const deviceA = await createChatClient({
-    server: baseUrl, token: tokenA, userId: A, workspaceId: WS, channelIds: [CH_X], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: A,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: src,
   });
   const deviceB = await createChatClient({
-    server: baseUrl, token: tokenA, userId: B, workspaceId: WS, channelIds: [CH_X], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: B,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: src,
   });
   await pullChannel(deviceA);
   await pullChannel(deviceB);
@@ -284,7 +347,11 @@ async function reproC1(): Promise<boolean> {
     return realAck?.(txId);
   };
 
-  deviceA.mutate.sendMessage({ id: "a-stuck", channelId: CH_X, body: "my own write, ack pull fails" });
+  deviceA.mutate.sendMessage({
+    id: "a-stuck",
+    channelId: CH_X,
+    body: "my own write, ack pull fails",
+  });
   await deviceA.waitForIdle();
   await new Promise((r) => setTimeout(r, 200));
 
@@ -299,14 +366,21 @@ async function reproC1(): Promise<boolean> {
 
   // Control: a fresh, un-blocked device pulls the same channel and its cursor advances normally.
   const control = await createChatClient({
-    server: baseUrl, token: tokenA, userId: B, workspaceId: WS, channelIds: [CH_X], subscribeSource: src,
+    server: baseUrl,
+    token: tokenA,
+    userId: B,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: src,
   });
   await pullChannel(control);
   const controlCursor = String(control.echo.getCursor("channel"));
 
   console.log(`  A cursor before B's traffic: ${cursorBefore}`);
   console.log(`  A cursor after 4 new B messages + 4 pulls: ${cursorAfter}  (frozen if unchanged)`);
-  console.log(`  control (un-blocked) cursor: ${controlCursor}  (this is where a healthy cursor lands)`);
+  console.log(
+    `  control (un-blocked) cursor: ${controlCursor}  (this is where a healthy cursor lands)`,
+  );
 
   await Promise.all([admin.dispose(), deviceA.dispose(), deviceB.dispose(), control.dispose()]);
   listener.close();
@@ -314,7 +388,9 @@ async function reproC1(): Promise<boolean> {
 
   const frozen = cursorAfter === cursorBefore && controlCursor !== cursorBefore;
   if (frozen) {
-    console.log("  🔴 C1 CONFIRMED — A's collection cursor is frozen after the failed ack; a healthy cursor advanced past it. Every pull now re-fetches from the frozen point (unbounded), and with paging, rows beyond page 1 starve.");
+    console.log(
+      "  🔴 C1 CONFIRMED — A's collection cursor is frozen after the failed ack; a healthy cursor advanced past it. Every pull now re-fetches from the frozen point (unbounded), and with paging, rows beyond page 1 starve.",
+    );
     return true;
   }
   console.log("  ✅ C1 NOT reproduced — A's cursor advanced despite the failed ack.");
@@ -334,14 +410,24 @@ async function reproConcurrency(): Promise<boolean> {
   const storage = db.storage;
   const realtime = inProcessRealtime();
   await provisionChat(db);
-  const server = createChatServer({ db: process.env.DATABASE_URL as string, secret: SECRET, storage, realtime });
+  const server = createChatServer({
+    db: process.env.DATABASE_URL as string,
+    secret: SECRET,
+    storage,
+    realtime,
+  });
   const listener = server.listen(0);
   await new Promise<void>((r) => listener.once("listening", () => r()));
   const port = (listener.address() as { port: number }).port;
   const baseUrl = `http://127.0.0.1:${port}`;
   const tokenA = issueBearerToken({ secret: SECRET, userId: A, ownerId: WS });
   const admin = await createChatClient({
-    server: baseUrl, token: tokenA, userId: A, workspaceId: WS, channelIds: [CH_X], subscribeSource: realtimeSource(realtime),
+    server: baseUrl,
+    token: tokenA,
+    userId: A,
+    workspaceId: WS,
+    channelIds: [CH_X],
+    subscribeSource: realtimeSource(realtime),
   });
   admin.mutate.createChannel({ id: CH_X, workspaceId: WS, name: "x" });
   await admin.waitForIdle();
@@ -350,7 +436,13 @@ async function reproConcurrency(): Promise<boolean> {
   // INSERT … ON CONFLICT DO NOTHING under real row-level contention).
   const cmid = "cmid-concurrent-dup";
   const pushBody = JSON.stringify({
-    mutations: [{ name: "sendMessage", clientMutationId: cmid, args: { id: "dup-msg", channelId: CH_X, body: "concurrent" } }],
+    mutations: [
+      {
+        name: "sendMessage",
+        clientMutationId: cmid,
+        args: { id: "dup-msg", channelId: CH_X, body: "concurrent" },
+      },
+    ],
   });
   const responses = await Promise.all(
     Array.from({ length: 12 }, () =>
@@ -362,13 +454,16 @@ async function reproConcurrency(): Promise<boolean> {
     ),
   );
   const rows = await db.query<{ count: number }>(
-    "select count(*)::int as count from messages where id = $1", ["dup-msg"],
+    "select count(*)::int as count from messages where id = $1",
+    ["dup-msg"],
   );
   const msgCount = rows.rows[0]?.count ?? -1;
   const serverErrors = responses.filter((r) => r.status >= 500);
   const statuses = responses.map((r) => r.status).sort();
   console.log(`  12 concurrent identical pushes → message rows: ${msgCount} (expected 1)`);
-  console.log(`  response statuses: [${statuses.join(",")}]; 5xx (PK-race/crash): ${serverErrors.length}`);
+  console.log(
+    `  response statuses: [${statuses.join(",")}]; 5xx (PK-race/crash): ${serverErrors.length}`,
+  );
 
   await admin.dispose();
   listener.close();
@@ -379,15 +474,17 @@ async function reproConcurrency(): Promise<boolean> {
     console.log("  ✅ idempotency HOLDS under real concurrency — applied exactly once, no 5xx.");
     return false;
   }
-  console.log(`  🔴 CONCURRENCY BUG — ${msgCount} rows and/or ${serverErrors.length} server errors under contention.`);
+  console.log(
+    `  🔴 CONCURRENCY BUG — ${msgCount} rows and/or ${serverErrors.length} server errors under contention.`,
+  );
   return true;
 }
 
 async function main() {
   console.log(
     USING_REAL_PG
-      ? `▶ Running against REAL hosted Postgres (DATABASE_URL set) — true concurrency fidelity.`
-      : `▶ Running against in-process PGlite (set DATABASE_URL=<neon> for real-PG fidelity).`,
+      ? "▶ Running against REAL hosted Postgres (DATABASE_URL set) — true concurrency fidelity."
+      : "▶ Running against in-process PGlite (set DATABASE_URL=<neon> for real-PG fidelity).",
   );
   const g1 = await reproG1();
   const b1 = await reproB1();
@@ -395,9 +492,15 @@ async function main() {
   const conc = await reproConcurrency();
   console.log(`\n──────── RESULT (${USING_REAL_PG ? "REAL POSTGRES" : "PGlite"}) ────────`);
   console.log(`G1 (no history backfill on join): ${g1 ? "🔴 CONFIRMED" : "✅ not reproduced"}`);
-  console.log(`B1 (live broadcast lost on publish failure): ${b1 ? "🔴 CONFIRMED" : "✅ not reproduced"}`);
-  console.log(`C1 (collection cursor frozen by a failed ack pull): ${c1 ? "🔴 CONFIRMED" : "✅ not reproduced"}`);
-  console.log(`Concurrency (idempotency under contention): ${conc ? "🔴 BUG" : USING_REAL_PG ? "✅ holds" : "⏭ skipped"}`);
+  console.log(
+    `B1 (live broadcast lost on publish failure): ${b1 ? "🔴 CONFIRMED" : "✅ not reproduced"}`,
+  );
+  console.log(
+    `C1 (collection cursor frozen by a failed ack pull): ${c1 ? "🔴 CONFIRMED" : "✅ not reproduced"}`,
+  );
+  console.log(
+    `Concurrency (idempotency under contention): ${conc ? "🔴 BUG" : USING_REAL_PG ? "✅ holds" : "⏭ skipped"}`,
+  );
   process.exit(0);
 }
 

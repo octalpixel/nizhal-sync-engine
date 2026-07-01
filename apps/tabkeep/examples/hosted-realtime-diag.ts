@@ -15,7 +15,8 @@ ws.onopen = () => {
   console.log("WS OPEN");
 };
 ws.onerror = (e) => console.log("WS ERROR", (e as { message?: string }).message ?? "");
-ws.onclose = (e) => console.log("WS CLOSE", (e as { code?: number }).code, (e as { reason?: string }).reason ?? "");
+ws.onclose = (e) =>
+  console.log("WS CLOSE", (e as { code?: number }).code, (e as { reason?: string }).reason ?? "");
 ws.onmessage = (e) => console.log("WS MESSAGE:", String((e as { data: unknown }).data));
 
 await new Promise((r) => setTimeout(r, 2500));

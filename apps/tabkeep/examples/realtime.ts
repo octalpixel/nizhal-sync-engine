@@ -25,9 +25,15 @@ async function main(): Promise<void> {
   try {
     await db.exec(TABKEEP_DDL);
     await storage.provision({ schema: tabkeepSchema, syncRules: tabkeepSyncRules });
-    const server = createTabkeepServer({ db: "postgres://unused", secret: SECRET, storage, realtime });
+    const server = createTabkeepServer({
+      db: "postgres://unused",
+      secret: SECRET,
+      storage,
+      realtime,
+    });
     listener = server.listen(0);
-    if (!listener.listening) await new Promise<void>((r) => listener!.once("listening", r));
+    const bound = listener;
+    if (!bound.listening) await new Promise<void>((r) => bound.once("listening", r));
     const addr = listener.address();
     if (!addr || typeof addr === "string") throw new Error("no port");
     const baseUrl = `http://127.0.0.1:${addr.port}`;
@@ -37,8 +43,20 @@ async function main(): Promise<void> {
         realtime.subscribe(buckets, { send: onMessage }),
     };
 
-    const a = await createTabkeepClient({ server: baseUrl, token, shopId: SHOP_ID, userId: USER_ID, subscribeSource });
-    const b = await createTabkeepClient({ server: baseUrl, token, shopId: SHOP_ID, userId: USER_ID, subscribeSource });
+    const a = await createTabkeepClient({
+      server: baseUrl,
+      token,
+      shopId: SHOP_ID,
+      userId: USER_ID,
+      subscribeSource,
+    });
+    const b = await createTabkeepClient({
+      server: baseUrl,
+      token,
+      shopId: SHOP_ID,
+      userId: USER_ID,
+      subscribeSource,
+    });
 
     // 1) realtime convergence + latency: write on A, time how long until B sees it (ping-driven).
     a.mutate.addCustomer({ id: CUSTOMER_ID, name: "Maya", phone: "+94 77 123 4567" });
@@ -46,16 +64,36 @@ async function main(): Promise<void> {
     await waitFor(() => b.customers.toArray.some((r) => r.id === CUSTOMER_ID));
     console.log(`✅ device B saw the new customer via realtime in ${Date.now() - t0}ms`);
 
-    a.mutate.recordCredit({ id: "credit-1", customerId: CUSTOMER_ID, amount: 100_000, note: "Provisions" });
+    a.mutate.recordCredit({
+      id: "credit-1",
+      customerId: CUSTOMER_ID,
+      amount: 100_000,
+      note: "Provisions",
+    });
     const t1 = Date.now();
     await waitFor(() => b.ledgerEntries.toArray.some((r) => r.id === "credit-1"));
-    console.log(`✅ device B converged on A's credit (Rs 1000.00) via realtime in ${Date.now() - t1}ms`);
-    assert(foldLedgerBalance(b.ledgerEntries.toArray, CUSTOMER_ID) === 100_000, "B balance = Rs 1000.00");
+    console.log(
+      `✅ device B converged on A's credit (Rs 1000.00) via realtime in ${Date.now() - t1}ms`,
+    );
+    assert(
+      foldLedgerBalance(b.ledgerEntries.toArray, CUSTOMER_ID) === 100_000,
+      "B balance = Rs 1000.00",
+    );
 
     // 2) CONCURRENT bidirectional reconciliation: A adds credit, B records payment, at the same time.
     const t2 = Date.now();
-    a.mutate.recordCredit({ id: "credit-2", customerId: CUSTOMER_ID, amount: 50_000, note: "More stock" });
-    b.mutate.recordPayment({ id: "payment-1", customerId: CUSTOMER_ID, amount: 20_000, note: "Part payment" });
+    a.mutate.recordCredit({
+      id: "credit-2",
+      customerId: CUSTOMER_ID,
+      amount: 50_000,
+      note: "More stock",
+    });
+    b.mutate.recordPayment({
+      id: "payment-1",
+      customerId: CUSTOMER_ID,
+      amount: 20_000,
+      note: "Part payment",
+    });
     const expected = 100_000 + 50_000 - 20_000; // 130_000 = Rs 1300.00
     await waitFor(
       () =>
@@ -84,7 +122,10 @@ async function main(): Promise<void> {
     await Promise.all([a.dispose(), b.dispose()]);
     console.log("\nTABKEEP REALTIME MULTI-DEVICE + RECONCILIATION PASSED ✅");
   } finally {
-    if (listener) await new Promise<void>((res, rej) => listener!.close((e?: Error) => (e ? rej(e) : res())));
+    if (listener) {
+      const bound = listener;
+      await new Promise<void>((res, rej) => bound.close((e?: Error) => (e ? rej(e) : res())));
+    }
     await db.close();
   }
 }

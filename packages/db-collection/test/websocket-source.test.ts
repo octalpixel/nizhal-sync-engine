@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  type WebSocketLike,
-  createWebSocketSource,
-} from "../src/websocket-source.js";
+import { type WebSocketLike, createWebSocketSource } from "../src/websocket-source.js";
 
 class FakeWebSocket implements WebSocketLike {
   static instances: FakeWebSocket[] = [];

@@ -84,7 +84,9 @@ export async function createChainClient(options: ChainClientOptions) {
     options.server !== undefined
       ? createNizhalBlobs({
           server: options.server,
-          auth: options.token ? { headers: { authorization: `Bearer ${options.token}` } } : undefined,
+          auth: options.token
+            ? { headers: { authorization: `Bearer ${options.token}` } }
+            : undefined,
           store: memoryBlobStore(),
         })
       : undefined;

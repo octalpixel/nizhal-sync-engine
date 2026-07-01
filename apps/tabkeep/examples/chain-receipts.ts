@@ -36,17 +36,37 @@ async function main(): Promise<void> {
         ('cashier-b','branch-b','cashier');
     `);
 
-    const server = createTabkeepChainServer({ db: "postgres://unused", secret: SECRET, storage, realtime, blob });
+    const server = createTabkeepChainServer({
+      db: "postgres://unused",
+      secret: SECRET,
+      storage,
+      realtime,
+      blob,
+    });
     listener = server.listen(PORT);
-    if (!listener.listening) await new Promise<void>((r) => listener!.once("listening", r));
+    const bound = listener;
+    if (!bound.listening) await new Promise<void>((r) => bound.once("listening", r));
     const subscribeSource = {
       subscribe: (buckets: string[], onMessage: (m: string) => void) =>
         realtime.subscribe(buckets, { send: onMessage }),
     };
     const tok = (userId: string, branchId: string, role: "owner" | "manager" | "cashier") =>
       mintChainToken({ secret: SECRET, userId, branchId, role });
-    const client = (userId: string, branchId: string, role: "owner" | "manager" | "cashier", branches: string[]) =>
-      createChainClient({ server: BASE_URL, token: tok(userId, branchId, role), userId, branchId, role, branches, subscribeSource });
+    const client = (
+      userId: string,
+      branchId: string,
+      role: "owner" | "manager" | "cashier",
+      branches: string[],
+    ) =>
+      createChainClient({
+        server: BASE_URL,
+        token: tok(userId, branchId, role),
+        userId,
+        branchId,
+        role,
+        branches,
+        subscribeSource,
+      });
 
     const cashierA = await client("cashier-a", "branch-a", "cashier", ["branch-a"]);
     const managerA = await client("manager-a", "branch-a", "manager", ["branch-a"]);
@@ -59,13 +79,20 @@ async function main(): Promise<void> {
     await waitFor(() => managerA.sales.toArray.some((s) => s.id === "s-a1"));
 
     // Upload a receipt image (bytes → presigned PUT → branch-scoped ref row).
-    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6, 7, 8]);
+    const bytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
     const file = new Blob([bytes], { type: "image/png" });
     const { key } = await cashierA.uploadReceipt({ saleId: "s-a1", file });
-    assert(typeof key === "string" && key.length > 0, "receipt uploaded; content-addressed blob key returned");
+    assert(
+      typeof key === "string" && key.length > 0,
+      "receipt uploaded; content-addressed blob key returned",
+    );
 
     // The ref row syncs to another device of the SAME branch.
-    await waitFor(() => managerA.receipts.toArray.some((r) => r.id === key && r.status === "synced"));
+    await waitFor(() =>
+      managerA.receipts.toArray.some((r) => r.id === key && r.status === "synced"),
+    );
     assert(
       managerA.receipts.toArray.some((r) => r.id === key && r.sale_id === "s-a1"),
       "manager (same branch, different device) sees the receipt ref via sync",
@@ -81,18 +108,29 @@ async function main(): Promise<void> {
 
     // Branch isolation: the other branch never even sees the ref.
     await new Promise((r) => setTimeout(r, 200));
-    assert(!cashierB.receipts.toArray.some((r) => r.id === key), "cashier B (other branch) cannot see the receipt ref (bucket isolation)");
+    assert(
+      !cashierB.receipts.toArray.some((r) => r.id === key),
+      "cashier B (other branch) cannot see the receipt ref (bucket isolation)",
+    );
 
     // Branch-scoped blob authz: the other branch is denied a download URL (server is the authority).
     const denied = await fetch(`${BASE_URL}/nizhal/blob/${encodeURIComponent(key)}/url`, {
       headers: { authorization: `Bearer ${tok("cashier-b", "branch-b", "cashier")}` },
     });
-    assert(denied.status === 404, "cashier B is denied a download URL for branch A's receipt (branch-scoped blob authz)");
+    assert(
+      denied.status === 404,
+      "cashier B is denied a download URL for branch A's receipt (branch-scoped blob authz)",
+    );
 
     await Promise.all([cashierA.dispose(), managerA.dispose(), cashierB.dispose()]);
-    console.log("\nTABKEEP CHAIN RECEIPTS (blob upload + ref sync + cross-device download + branch-scoped authz) PROVEN ✅");
+    console.log(
+      "\nTABKEEP CHAIN RECEIPTS (blob upload + ref sync + cross-device download + branch-scoped authz) PROVEN ✅",
+    );
   } finally {
-    if (listener) await new Promise<void>((res, rej) => listener!.close((e?: Error) => (e ? rej(e) : res())));
+    if (listener) {
+      const bound = listener;
+      await new Promise<void>((res, rej) => bound.close((e?: Error) => (e ? rej(e) : res())));
+    }
     await db.close();
     rmSync(blobRoot, { recursive: true, force: true });
   }

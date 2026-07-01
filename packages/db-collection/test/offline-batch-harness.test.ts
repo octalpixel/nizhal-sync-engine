@@ -281,8 +281,10 @@ describe("RFC-011 offline-batch transport harness (real client -> real server, i
       await waitFor(async () => (await serverClientIds(h.db)).length >= 3, 15000);
       expect((await serverClientIds(h.db)).filter((id) => id.startsWith("ack-")).length).toBe(3);
     } finally {
+      // biome-ignore lint/performance/noDelete: delete unsets the env var; assigning undefined stores the string "undefined"
       if (prevAck === undefined) delete process.env.NIZHAL_ACK_TIMEOUT_MS;
       else process.env.NIZHAL_ACK_TIMEOUT_MS = prevAck;
+      // biome-ignore lint/performance/noDelete: delete unsets the env var; assigning undefined stores the string "undefined"
       if (prevFetch === undefined) delete process.env.NIZHAL_FETCH_TIMEOUT_MS;
       else process.env.NIZHAL_FETCH_TIMEOUT_MS = prevFetch;
     }
@@ -317,6 +319,7 @@ describe("RFC-011 offline-batch transport harness (real client -> real server, i
       expect((await serverClientIds(h.db)).sort()).toEqual(["hang-1", "hang-2", "hang-3"]);
       expect(deadLetter.length).toBe(0);
     } finally {
+      // biome-ignore lint/performance/noDelete: delete unsets the env var; assigning undefined stores the string "undefined"
       if (prev === undefined) delete process.env.NIZHAL_FETCH_TIMEOUT_MS;
       else process.env.NIZHAL_FETCH_TIMEOUT_MS = prev;
     }

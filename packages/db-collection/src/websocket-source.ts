@@ -62,6 +62,7 @@ export interface WebSocketSourceOptions {
   /** Invoked when a connect attempt closes *before opening* (the upgrade-time auth/network failure
    *  mode). Refresh the token here; the next attempt re-reads `getUrl`/`getHeaders`. Resolve `false`
    *  to stop retrying (auth-fatal), `true`/void to keep backing off. */
+  // biome-ignore lint/suspicious/noConfusingVoidType: void is intentional — the contract accepts void-returning callbacks (() => void); undefined would reject them
   onConnectFailure?: () => Promise<boolean | void> | boolean | void;
   reconnect?: WebSocketReconnectOptions;
   /** Application-level heartbeat. Off unless provided (it needs a server that echoes the ping). */

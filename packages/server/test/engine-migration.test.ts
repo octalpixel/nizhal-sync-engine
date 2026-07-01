@@ -40,7 +40,10 @@ async function udt(db: PGlite, table: string, column: string): Promise<string | 
   return r[0]?.udt_name;
 }
 async function stampedVersion(db: PGlite): Promise<string | undefined> {
-  const r = await rows<{ value: string }>(db, "select value from _nizhal_meta where key = 'engine_version'");
+  const r = await rows<{ value: string }>(
+    db,
+    "select value from _nizhal_meta where key = 'engine_version'",
+  );
   return r[0]?.value;
 }
 
@@ -114,18 +117,30 @@ describe("engine schema versioning + migration", () => {
     );
     expect(preserved.map((r) => r.id)).toEqual(["n1", "n2"]);
     expect(preserved.map((r) => r.rv)).toEqual(["1", "2"]);
-    const tomb = await rows<{ rv: string }>(db, "select row_version::text as rv from _nizhal_tombstones");
+    const tomb = await rows<{ rv: string }>(
+      db,
+      "select row_version::text as rv from _nizhal_tombstones",
+    );
     expect(tomb[0]?.rv).toBe("3");
 
     // the old sequence + unique index are gone; the non-unique index exists
-    const seq = await rows<{ present: boolean }>(db, "select to_regclass('_nizhal_row_version_seq') is not null as present");
+    const seq = await rows<{ present: boolean }>(
+      db,
+      "select to_regclass('_nizhal_row_version_seq') is not null as present",
+    );
     expect(seq[0]?.present).toBe(false);
-    const uniq = await rows<{ present: boolean }>(db, "select to_regclass('_nizhal_tombstones_row_version_key') is not null as present");
+    const uniq = await rows<{ present: boolean }>(
+      db,
+      "select to_regclass('_nizhal_tombstones_row_version_key') is not null as present",
+    );
     expect(uniq[0]?.present).toBe(false);
 
     // new writes now allocate a real transaction id, strictly above every migrated (small) version
     await db.exec("insert into notes (id, owner_id, body) values ('n3', 'o1', 'third')");
-    const fresh = await rows<{ rv: string }>(db, "select _nizhal_row_version::text as rv from notes where id = 'n3'");
+    const fresh = await rows<{ rv: string }>(
+      db,
+      "select _nizhal_row_version::text as rv from notes where id = 'n3'",
+    );
     expect(BigInt(fresh[0]?.rv ?? "0")).toBeGreaterThan(3n);
   });
 
@@ -134,7 +149,9 @@ describe("engine schema versioning + migration", () => {
     await db.exec("create table notes (id text primary key, owner_id text not null, body text)");
     await storage.provision({ schema: { notes }, syncRules });
     await db.exec("update _nizhal_meta set value = '99' where key = 'engine_version'");
-    await expect(storage.provision({ schema: { notes }, syncRules })).rejects.toThrow(/newer than this server/);
+    await expect(storage.provision({ schema: { notes }, syncRules })).rejects.toThrow(
+      /newer than this server/,
+    );
   });
 
   it("reset drops the engine, keeps business rows, and reprovisions at the current version", async () => {
@@ -150,7 +167,10 @@ describe("engine schema versioning + migration", () => {
     expect(await udt(db, "notes", "_nizhal_row_version")).toBe("xid8");
     const kept = await rows<{ id: string; body: string }>(db, "select id, body from notes");
     expect(kept).toEqual([{ id: "keep", body: "survives reset" }]);
-    const tombCount = await rows<{ n: number }>(db, "select count(*)::int as n from _nizhal_tombstones");
+    const tombCount = await rows<{ n: number }>(
+      db,
+      "select count(*)::int as n from _nizhal_tombstones",
+    );
     expect(tombCount[0]?.n).toBe(0);
   });
 });

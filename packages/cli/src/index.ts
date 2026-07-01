@@ -66,9 +66,7 @@ export async function migrate(
   } catch (error) {
     if (isMissingRelationError(error)) {
       throw new Error(
-        "nizhal migrate provisions the sync engine onto your EXISTING tables — a synced table was not found. " +
-          "Create your business schema (your ORM/SQL migrations) before running nizhal migrate. " +
-          `Underlying: ${error instanceof Error ? error.message : String(error)}`,
+        `nizhal migrate provisions the sync engine onto your EXISTING tables — a synced table was not found. Create your business schema (your ORM/SQL migrations) before running nizhal migrate. Underlying: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
     throw error;

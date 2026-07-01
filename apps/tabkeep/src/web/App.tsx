@@ -112,7 +112,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [buildSubscribeSource]);
 
   if (fatalError) {
     return (

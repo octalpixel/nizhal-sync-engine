@@ -48,5 +48,9 @@ const ledger = pulled.changed.find((c) => c.table === "ledger_entries");
 const mine = ledger?.rows.find((r) => (r as { id?: string }).id === eid);
 console.log("cursor:", pulled.cursor);
 console.log("tables:", pulled.changed.map((c) => `${c.table}:${c.rows.length}`).join(", "));
-console.log(mine ? `PULL OK — found ${eid} amount=${(mine as { amount?: number }).amount}` : `PULL MISSING ${eid}`);
+console.log(
+  mine
+    ? `PULL OK — found ${eid} amount=${(mine as { amount?: number }).amount}`
+    : `PULL MISSING ${eid}`,
+);
 process.exit(mine ? 0 : 3);

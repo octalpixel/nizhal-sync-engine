@@ -13,12 +13,7 @@
  */
 import { createServer } from "node:http";
 import { PGlite } from "@electric-sql/pglite";
-import {
-  defineMutator,
-  defineMutators,
-  defineSyncRules,
-  z,
-} from "@nizhal/kernel";
+import { defineMutator, defineMutators, defineSyncRules, z } from "@nizhal/kernel";
 import { type NizhalAuth, createNizhalServer } from "@nizhal/server";
 import type { RealtimeAdapter } from "@nizhal/server/adapters";
 import { postgresStorage } from "@nizhal/server/adapters";
@@ -62,22 +57,21 @@ const auth: NizhalAuth = {
 };
 
 const testMutators = defineMutators({
-  addNote: defineMutator(z.object({ clientId: z.string(), body: z.string() }), async ({
-    tx,
-    actor,
-    location,
-  }, args) => {
-    const result = (await tx.insert(notes).values({
-      id: location === "client" ? 0 : undefined,
-      owner_id: actor.ownerId,
-      body: args.body,
-      client_id: args.clientId,
-    })) as { id: number }[];
-    return {
-      serverId: result[0]?.id,
-      affectedBuckets: [actor.ownerId],
-    };
-  }),
+  addNote: defineMutator(
+    z.object({ clientId: z.string(), body: z.string() }),
+    async ({ tx, actor, location }, args) => {
+      const result = (await tx.insert(notes).values({
+        id: location === "client" ? 0 : undefined,
+        owner_id: actor.ownerId,
+        body: args.body,
+        client_id: args.clientId,
+      })) as { id: number }[];
+      return {
+        serverId: result[0]?.id,
+        affectedBuckets: [actor.ownerId],
+      };
+    },
+  ),
 });
 
 interface Fault {
@@ -203,9 +197,7 @@ function inProcessRealtime(): RealtimeAdapter {
   };
 }
 
-function serveFetch(
-  fetchFn: typeof fetch,
-): Promise<{ baseUrl: string; close: () => void }> {
+function serveFetch(fetchFn: typeof fetch): Promise<{ baseUrl: string; close: () => void }> {
   const server = createServer((req, res) => {
     const host = req.headers.host ?? "127.0.0.1";
     const url = `http://${host}${req.url ?? "/"}`;
@@ -308,7 +300,7 @@ describe("RFC-011 adversarial offline-loss repro", () => {
       try {
         await waitFor(async () => {
           onServer = await serverClientIds(h.db);
-          return (onServer.length + h.stack.deadLetter.length) >= 3;
+          return onServer.length + h.stack.deadLetter.length >= 3;
         }, 10000);
       } catch {
         onServer = await serverClientIds(h.db);
@@ -425,9 +417,7 @@ describe("RFC-011 adversarial offline-loss repro", () => {
     // Case 1: { applied: null } → Array.isArray(null)=false → applied=true → status="applied"
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     try {
-      fetchSpy.mockResolvedValue(
-        new Response(JSON.stringify({ applied: null }), { status: 200 }),
-      );
+      fetchSpy.mockResolvedValue(new Response(JSON.stringify({ applied: null }), { status: 200 }));
       const result1 = await target.push(request);
       expect(result1.status).toBe("applied");
 
@@ -439,16 +429,12 @@ describe("RFC-011 adversarial offline-loss repro", () => {
       expect(result2.status).toBe("applied");
 
       // Case 3: {} (empty object) → applied=true (fallback)
-      fetchSpy.mockResolvedValue(
-        new Response(JSON.stringify({}), { status: 200 }),
-      );
+      fetchSpy.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
       const result3 = await target.push(request);
       expect(result3.status).toBe("applied");
 
       // Case 4: Normal response: { applied: [] } → applied=false → status="staleSequence"
-      fetchSpy.mockResolvedValue(
-        new Response(JSON.stringify({ applied: [] }), { status: 200 }),
-      );
+      fetchSpy.mockResolvedValue(new Response(JSON.stringify({ applied: [] }), { status: 200 }));
       const result4 = await target.push(request);
       expect(result4.status).toBe("staleSequence");
 
@@ -461,9 +447,9 @@ describe("RFC-011 adversarial offline-loss repro", () => {
 
       console.log(
         `[V3a] sync-target parsing verified: applied=null→"applied", ` +
-        `applied=string→"applied", empty→"applied", ` +
-        `applied=[]→"staleSequence", applied=[uuid]→"applied" ` +
-        `(grounding: sync-target.ts ~:121)`,
+          `applied=string→"applied", empty→"applied", ` +
+          `applied=[]→"staleSequence", applied=[uuid]→"applied" ` +
+          "(grounding: sync-target.ts ~:121)",
       );
     } finally {
       fetchSpy.mockRestore();

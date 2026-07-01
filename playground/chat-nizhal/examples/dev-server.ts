@@ -68,7 +68,7 @@ await sql.end();
 console.log(
   `Chat dev server on http://127.0.0.1:${PORT}  (Neon-backed, realtime via /sync/stream)`,
 );
-console.log(`  open the web UI and visit ?user=ada and ?user=lin in two tabs`);
+console.log("  open the web UI and visit ?user=ada and ?user=lin in two tabs");
 
 async function close() {
   await new Promise<void>((resolve, reject) =>

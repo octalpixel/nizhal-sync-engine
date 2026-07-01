@@ -1,5 +1,6 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
     "ignore": [
@@ -11,7 +12,11 @@
       "research",
       "**/*.md",
       "apps/docs",
-      "apps/op-sqlite-probe"
+      "apps/op-sqlite-probe",
+      "**/ios/**",
+      "**/android/**",
+      "**/.vercel/**",
+      "**/.expo/**"
     ]
   },
   "organizeImports": { "enabled": true },

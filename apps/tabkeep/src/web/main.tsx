@@ -1,8 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { App } from "./App.js";
 import { AppCF } from "./App.CF.js";
 import { AppRealtime } from "./App.Realtime.js";
+import { App } from "./App.js";
 import "./styles.css";
 
 const root = document.getElementById("root");
