@@ -2,10 +2,9 @@ import {
   type NizhalCollection,
   type NizhalSQLitePersistence,
   createNizhalMutators,
-  manualOnlineDetector,
   nizhalCollectionOptions,
 } from "@nizhal/db-collection";
-import { createNizhalNitroClient, reactNativeOnlineDetector } from "@nizhal/react-native";
+import { createEcho, createOnlineDetector } from "./echo";
 import {
   type SyncRuleBuilder,
   type SyncRules,
@@ -86,22 +85,13 @@ export async function createTabkeepExpoClient(options: {
   persistence?: NizhalSQLitePersistence;
 }) {
   if (!options.server) throw new Error("server is required");
-  // Native React Native transport: realtime over native WebSockets (react-native-nitro-websockets,
-  // Authorization on the upgrade) + HTTP over nitro-fetch. Installs crypto.randomUUID polyfill.
-  // auth.refresh re-fetches a fresh bearer on a 401 so an expired session token is replaced and the
-  // mutation retried, instead of the durable outbox dead-lettering the write (4xx park).
-  const echo = createNizhalNitroClient({
+  // Transport is platform-picked by Metro: nitro fetch/websockets on native, browser fetch/WebSocket
+  // on web (src/echo.native.ts vs src/echo.ts). Same client/outbox/collections either way.
+  const echo = createEcho({
     server: options.server,
     token: options.token,
     realtimeHost: options.realtimeHost,
-    auth: options.token
-      ? {
-          headers: { authorization: `Bearer ${options.token}` },
-          refresh: options.refreshToken
-            ? async () => ({ authorization: `Bearer ${await options.refreshToken?.()}` })
-            : undefined,
-        }
-      : undefined,
+    refreshToken: options.refreshToken,
     bucketsForSyncRule: (rule) => (rule === "myShop" ? [options.shopId] : []),
   });
   const persistence = options.persistence?.persistence;
@@ -112,9 +102,9 @@ export async function createTabkeepExpoClient(options: {
     nizhalCollectionOptions<LedgerEntryRow>({ name: "ledger_entries", syncRule: "myShop", echo, bucketField: "shop_id", getKey: (r) => r.id, persistence }),
   ) as NizhalCollection<LedgerEntryRow>;
   await Promise.all([customersC.preload(), ledgerC.preload()]);
-  // Real connectivity (NetInfo) wrapped in a manual override so the UI can simulate offline
-  // deterministically — `setOnline(false)` holds the outbox regardless of the network.
-  const onlineDetector = manualOnlineDetector(reactNativeOnlineDetector());
+  // Connectivity detector, platform-picked (NetInfo on native, browser online events on web), wrapped
+  // for deterministic manual override — `setOnline(false)` holds the outbox regardless of the network.
+  const onlineDetector = createOnlineDetector();
   const mutators = createNizhalMutators({
     collections: { customers: customersC, ledger_entries: ledgerC } as Record<string, NizhalCollection<object>>,
     echo,
