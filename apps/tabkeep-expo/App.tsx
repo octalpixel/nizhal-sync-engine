@@ -1,3 +1,8 @@
+import {
+  kvSessionStore,
+  localStorageSessionStore,
+  startLocalFirstBootstrap,
+} from "@nizhal/db-collection";
 import { useLiveQuery } from "@tanstack/react-db";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -12,16 +17,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import {
-  kvSessionStore,
-  localStorageSessionStore,
-  startLocalFirstBootstrap,
-} from "@nizhal/db-collection";
 import { ChatScreen } from "./src/chat/ChatScreen";
+import { createTabkeepExpoClient } from "./src/client";
 import {
   type CustomerRow,
   type LedgerEntryRow,
-  createTabkeepExpoClient,
   foldLedgerBalance,
   formatMinorUnits,
 } from "./src/domain";

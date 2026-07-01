@@ -1,4 +1,3 @@
-import { type NizhalSQLitePersistence, openNizhalStore } from "@nizhal/db-collection";
 import {
   type SyncRuleBuilder,
   type SyncRules,
@@ -8,11 +7,10 @@ import {
   z,
 } from "@nizhal/kernel";
 import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { createEcho, createOnlineDetector } from "./echo";
 
-// Self-contained copy of the Tabkeep domain (a future @nizhal/tabkeep-core would let web + Expo share
-// this verbatim). The engine packages are the real shared dependency; this is just the table shapes,
-// the three financial verbs, and the one shop-scoped sync rule.
+// The entire Tabkeep domain: table shapes, the four financial verbs, and the one shop-scoped sync rule.
+// Transport-free by design — this is the ~exactly what you write, and both the client (src/client.ts)
+// and `nizhal migrate` (nizhal.config.ts) are derived from it. No engine internals leak in here.
 const syncColumns = {
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deleted_at: timestamp("deleted_at", { withTimezone: true }),
@@ -97,49 +95,6 @@ export const tabkeepSyncRules = defineSyncRules(
       }),
     }) as unknown as SyncRules,
 );
-
-export async function createTabkeepExpoClient(options: {
-  shopId: string;
-  userId: string;
-  server?: string;
-  token?: string;
-  refreshToken?: () => Promise<string>;
-  /** Dedicated CF realtime Worker host — set for a serverless server (Vercel) + CF Worker realtime. */
-  realtimeHost?: string;
-  persistence?: NizhalSQLitePersistence;
-}) {
-  if (!options.server) throw new Error("server is required");
-  // Transport is platform-picked by Metro: nitro fetch/websockets on native, browser fetch/WebSocket
-  // on web (src/echo.native.ts vs src/echo.ts). Same client/outbox/collections either way.
-  const echo = createEcho({
-    server: options.server,
-    token: options.token,
-    realtimeHost: options.realtimeHost,
-    refreshToken: options.refreshToken,
-    bucketsForSyncRule: (rule) => (rule === "myShop" ? [options.shopId] : []),
-  });
-  // Connectivity detector, platform-picked (NetInfo on native, browser online events on web), wrapped
-  // for deterministic manual override — `setOnline(false)` holds the outbox regardless of the network.
-  const onlineDetector = createOnlineDetector();
-  // One primitive assembles the whole client store from the schema + sync rules + mutators. The
-  // platform still owns transport (`createEcho`) and the connectivity detector above.
-  const store = await openNizhalStore({
-    echo,
-    schema: { customers, ledgerEntries },
-    syncRules: tabkeepSyncRules,
-    mutators: tabkeepMutators,
-    actor: { userId: options.userId, ownerId: options.shopId },
-    persistence: options.persistence,
-    onlineDetector,
-  });
-  return {
-    customers: store.collections.customers,
-    ledgerEntries: store.collections.ledgerEntries,
-    mutate: store.mutate,
-    onlineDetector,
-    dispose: store.dispose,
-  };
-}
 
 export function foldLedgerBalance(entries: readonly LedgerEntryRow[], customerId: string): number {
   return entries.reduce((bal, e) => {

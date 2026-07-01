@@ -43,11 +43,43 @@ automatically by Metro). Same Nizhal client/outbox as web — only the local sto
 > it. The fix is a toolchain pass: build Hermes from source, or align to an Expo SDK / Hermes prebuilt
 > where the symbol is exported. The native wiring here is correct and ready once the toolchain is fixed.
 
+## The reference: declare once, run + deploy from the same source
+
+Tabkeep is the reference for what building on Nizhal looks like. You write three things, once:
+
+- **`src/domain.ts`** — the tables, the four financial verbs (mutators), and the one shop-scoped sync
+  rule. Transport-free: no engine internals, no client/server wiring. This *is* the app's spec.
+
+Everything else is derived from it:
+
+- **`src/client.ts`** — the offline-first client. Below the `createEcho` platform seam it's one
+  `openNizhalStore({ echo, schema, syncRules, mutators, actor, persistence })` call; the launch
+  dance (cached-open → background refresh → first-launch retry) is one `startLocalFirstBootstrap`
+  call in `App.tsx`. Collections, outbox, mutation-id/dead-letter stores, and the merge policies are
+  all framework.
+- **`nizhal.config.ts`** — `{ schema, syncRules }` re-exported from the domain, so the server engine
+  and the client are provisioned from the same declarations and can't drift.
+
+## Deploy the engine (`nizhal migrate`)
+
+`nizhal migrate` provisions the sync engine (row-version columns, tombstones, audit, triggers) onto
+your **existing** business tables — create those first (your ORM/SQL), then:
+
+```bash
+nizhal migrate --config nizhal.config.ts --db "$DATABASE_URL"   # fresh install or in-place upgrade
+nizhal reset   --config nizhal.config.ts --db "$DATABASE_URL" --yes   # clean-slate reprovision
+```
+
+Migrate is version-aware and idempotent: a fresh DB is provisioned + stamped, an older engine is
+migrated in place (e.g. the bigint→xid8 row-version upgrade, preserving row order and every client
+cursor), and a current one is a no-op. The no-skip row-version guarantee is enforced in CI against a
+real Postgres, so correctness travels with the repo, not just a live session.
+
 ## Notes
 
-- `src/domain.ts` is a self-contained copy of the Tabkeep domain. A shared `@nizhal/tabkeep-core`
-  package (consumed by both the web flagship and this app) is the clean follow-up — the engine
-  packages are already the real shared dependency.
+- `src/domain.ts` is a self-contained copy of the Tabkeep domain — the same shape the web flagship
+  declares. The engine packages are the real shared dependency; the domain is small enough to keep
+  per-app rather than couple the two behind a shared package.
 - Web persistence here is in-memory (records sync but don't survive a reload). Durable web persistence
   via `wa-sqlite` under Metro is the next increment; native gets durability via `op-sqlite`.
 - `ios/` and `android/` are not committed — they're regenerated with `expo prebuild` (CNG).
