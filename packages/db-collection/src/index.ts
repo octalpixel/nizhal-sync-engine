@@ -29,6 +29,17 @@ export type {
   OpenNizhalStoreOptions,
 } from "./store.js";
 export {
+  kvSessionStore,
+  localStorageSessionStore,
+  startLocalFirstBootstrap,
+} from "./bootstrap.js";
+export type {
+  LocalFirstBootstrap,
+  LocalFirstBootstrapOptions,
+  NizhalKvStore,
+  NizhalSessionStore,
+} from "./bootstrap.js";
+export {
   presence,
   subscribePresence,
   track,

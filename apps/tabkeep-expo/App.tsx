@@ -12,6 +12,11 @@ import {
   TextInput,
   View,
 } from "react-native";
+import {
+  kvSessionStore,
+  localStorageSessionStore,
+  startLocalFirstBootstrap,
+} from "@nizhal/db-collection";
 import { ChatScreen } from "./src/chat/ChatScreen";
 import {
   type CustomerRow,
@@ -21,7 +26,12 @@ import {
   formatMinorUnits,
 } from "./src/domain";
 import { openTabkeepPersistence } from "./src/persistence";
-import { type CachedSession, loadSession, saveSession } from "./src/session";
+
+interface CachedSession {
+  shopId: string;
+  userId: string;
+  token: string;
+}
 
 // EXPO_PUBLIC_APP=chat renders the Nizhal chat client (same hosted server); default is the ledger.
 export default function App() {
@@ -62,58 +72,41 @@ function LedgerApp() {
   const [needsConnection, setNeedsConnection] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    let opened: Client | null = null;
+    let disposed = false;
+    let boot: { dispose(): void } | undefined;
 
-    const openClient = async (session: CachedSession) => {
-      const c = await createTabkeepExpoClient({
-        shopId: session.shopId,
-        userId: session.userId,
-        server: SERVER,
-        realtimeHost: REALTIME_HOST,
-        token: session.token,
-        // Each token refresh (on 401) re-caches the session, so the next offline boot has a fresh token.
-        refreshToken: async () => {
-          const fresh = await fetchSession();
-          await saveSession(fresh);
-          return fresh.token;
-        },
-        persistence: await openTabkeepPersistence(),
+    void (async () => {
+      // Native persistence carries a durable KV (_nizhal_meta), so the session cache rides the same
+      // store; web has no SQLite yet, so it falls back to localStorage. The rest of the local-first
+      // launch dance (cached-open → background refresh → first-launch retry) lives in the framework.
+      const persistence = await openTabkeepPersistence();
+      if (disposed) return;
+      const sessionStore = persistence
+        ? kvSessionStore<CachedSession>(persistence.metaStorage, "tabkeep.session")
+        : localStorageSessionStore<CachedSession>("tabkeep.session");
+      boot = startLocalFirstBootstrap<CachedSession, Client>({
+        sessionStore,
+        fetchSession,
+        openStore: (session, { refreshSession }) =>
+          createTabkeepExpoClient({
+            shopId: session.shopId,
+            userId: session.userId,
+            server: SERVER,
+            realtimeHost: REALTIME_HOST,
+            token: session.token,
+            // Each 401 refresh re-caches the session, so the next offline boot has a fresh token.
+            refreshToken: async () => (await refreshSession()).token,
+            persistence,
+          }),
+        onOpen: setClient,
+        onConnectionRequired: setNeedsConnection,
       });
-      if (cancelled) {
-        void c.dispose();
-        return;
-      }
-      opened = c;
-      setClient(c);
-      setNeedsConnection(false);
-    };
-
-    (async () => {
-      // 1. Local-first: with a cached session, open the local replica IMMEDIATELY — works fully offline.
-      const cached = await loadSession();
-      if (cached && !cancelled) await openClient(cached);
-
-      // 2. Background: refresh the session without ever blocking the local UI. With a cached session we
-      //    try once (the live client self-heals via auth.refresh on reconnect); on a first-ever launch
-      //    with no cache we retry until the server is first reachable, then open.
-      while (!cancelled) {
-        try {
-          const fresh = await fetchSession();
-          await saveSession(fresh);
-          if (!cached && !cancelled) await openClient(fresh);
-          break;
-        } catch {
-          if (cached) break;
-          setNeedsConnection(true);
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-        }
-      }
+      if (disposed) boot.dispose();
     })();
 
     return () => {
-      cancelled = true;
-      void opened?.dispose();
+      disposed = true;
+      boot?.dispose();
     };
   }, []);
 
@@ -387,7 +380,10 @@ function EntryDetailModal({
           <Text style={styles.modalTitle}>{isCredit ? "Credit given" : "Payment received"}</Text>
           {entry ? (
             <View style={{ gap: 8 }}>
-              <DetailRow label="Amount" value={`${isCredit ? "+" : "−"}${formatMinorUnits(entry.amount)}`} />
+              <DetailRow
+                label="Amount"
+                value={`${isCredit ? "+" : "−"}${formatMinorUnits(entry.amount)}`}
+              />
               <DetailRow label="Note" value={entry.note || "—"} />
               <DetailRow label="Recorded" value={formatWhen(entry.created_at)} />
               <DetailRow label="Entry id" value={entry.id} />
