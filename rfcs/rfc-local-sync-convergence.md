@@ -170,6 +170,13 @@ the column block is for schema lowering.
 Recovery/versioning rule (from Zero's playbook): contract carries a schema version; an incompatible
 client gets a `re-bootstrap` signal (we already have `cursorReset` machinery on bucket growth).
 
+**Stage gate (2026-07-02 stage-fit review):** the gen *scope* above stands, but building the CLI is
+**demand-gated** — first real brownfield integration or pre-1.0, whichever lands first. At alpha,
+greenfield apps keep the shared-`domain.ts` pattern (type-perfect, zero consumers are harmed) and
+the client sqlite schema comes from the kernel's runtime `deriveSqliteSchema`. Client DDL
+migrations for synced tables start as regenerate + atomic nuke-and-repull (safe by architecture:
+the outbox is separate and drains first); real snapshot-diff migrations arrive with the gen CLI.
+
 ## 7. Path B — brownfield: the porulle-POS walkthrough
 
 Scenario: a POS frontend must go offline-first against an **existing porulle backend** (Postgres,
@@ -356,7 +363,9 @@ re-targeted at the drizzle-native store. Invariants that aren't tested are opini
    read-only synced drizzle DB (server-authoritative rung for dashboards/porulle-POS product
    catalog). The blob plane still handles writes for existing apps.
 3. **Write-path convergence** — outbox + mutator replay + rebase design review; drizzle-native
-   client passes `repro-offline-loss` + push/409 suites; tabkeep-expo migrates as the reference.
+   client passes `repro-offline-loss` + push/409 suites. Reference app: **`playground/pos`** (it is
+   already offline-only and its code says it wants to become synced) — **not tabkeep**, which ships
+   its mobile release on the proven blob plane and migrates only after that release.
 4. **Retire** the blob plane from the sync path (keep TanStack for whoever wants collection UX as a
    layer, not a requirement).
 
@@ -375,11 +384,13 @@ re-targeted at the drizzle-native store. Invariants that aren't tested are opini
 | D9 | TanStack DB is a *layer*, never the foundation: `localDbCollection()` sources collections from `local.watch`; deferred until a real consumer | **decided** (§4 rejected-alternative) |
 | D10 | H1–H5 failure-class invariants are stage requirements, gated by the loss-repro suites | **decided** (§10) |
 
-## 12. Immediate next steps
+## 12. Immediate next steps (slimmed by the 2026-07-02 stage-fit review — see
+`docs/local-sync-architecture.md` for the shareable summary)
 
 1. Kernel: `deriveSqliteSchema` (port Spike C's `derive.mjs`, typed, fail-closed) + tests.
-2. Kernel/server: contract `x-echo.tables[].columns` extension (reflection already exists).
-3. CLI: `nizhal gen client` (schema + migrations + typed mutate + sync-meta) — un-stub.
-4. `nizhal migrate --dry-run` (print `statements[]`) — brownfield trust cheaply bought.
-5. Stage-2 read-path spike: pull-apply into derived tables against the real server
-   (the emulation harness already runs client+server+wa-sqlite in Node).
+2. `nizhal migrate --dry-run` (print `statements[]`) — brownfield trust cheaply bought.
+3. Stage-2 read-path: pull-apply into derived tables against the real server, H1 canary + H2
+   atomic-reset built in from day one (the emulation harness already runs client+server+wa-sqlite
+   in Node). Reference: `playground/pos`.
+4. *Demand-gated (do not build yet):* contract `x-echo.tables[].columns` extension + `nizhal gen
+   client` — triggered by the first real brownfield integration or pre-1.0 (§6 stage gate).
