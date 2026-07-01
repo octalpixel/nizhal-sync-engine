@@ -16,3 +16,32 @@ jobs:
       - run: pnpm check-types
       - run: pnpm test
       - run: pnpm lint
+
+  real-postgres:
+    # Repo-enforces the lock-free, no-skip row-version guarantee. Out-of-order-commit skip can ONLY be
+    # falsified under TRUE Postgres concurrency (PGlite is single-connection, so `pnpm test` cannot cover
+    # it). Without this job the core correctness property is only ever verified by hand.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nizhal_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NIZHAL_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/nizhal_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: no-skip under real-Postgres concurrency
+        run: pnpm --filter @nizhal/server exec vitest run test/version-skip-concurrency.test.ts
