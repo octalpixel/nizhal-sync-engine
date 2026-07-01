@@ -14,6 +14,7 @@ import {
   z,
 } from "@nizhal/kernel";
 import { createCollection } from "@tanstack/db";
+import { eq } from "drizzle-orm";
 import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 // Self-contained copy of the Tabkeep domain (a future @nizhal/tabkeep-core would let web + Expo share
@@ -60,6 +61,12 @@ export const tabkeepMutators = defineMutators({
   }),
   recordPayment: defineMutator(ledgerInput, async ({ tx, ownerId, now }, args) => {
     await tx.insert(ledgerEntries).values({ id: args.id, shop_id: ownerId, customer_id: args.customerId, kind: "payment", amount: args.amount, note: args.note || null, created_at: new Date(now()) });
+    return { serverId: args.id, affectedBuckets: [ownerId] };
+  }),
+  // The one edit on a shared field — concurrent renames of the same customer resolve via the table's
+  // merge policy (lww). Ledger entries stay append-only, so they can't conflict.
+  renameCustomer: defineMutator(z.object({ id, name: z.string().trim().min(1) }), async ({ tx, ownerId }, args) => {
+    await tx.update(customers).set({ name: args.name }).where(eq(customers.id, args.id));
     return { serverId: args.id, affectedBuckets: [ownerId] };
   }),
 });

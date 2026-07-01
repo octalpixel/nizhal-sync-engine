@@ -287,6 +287,8 @@ function CustomerDetail({
   onBack: () => void;
 }) {
   const [action, setAction] = useState<"credit" | "payment" | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [entryDetail, setEntryDetail] = useState<LedgerEntryRow | null>(null);
   const balance = foldLedgerBalance(entries, customer.id);
   const chronological = [...entries].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -302,6 +304,9 @@ function CustomerDetail({
           <p className="eyebrow">Running tab</p>
           <h1>{customer.name}</h1>
           <p>{customer.phone || "No phone number"}</p>
+          <button className="back-button" type="button" onClick={() => setRenaming(true)}>
+            ✎ Edit name
+          </button>
         </div>
         <div className={`hero-balance ${balance > 0 ? "is-owed" : "is-settled"}`}>
           <small>{balance > 0 ? "Owes you" : "Balance"}</small>
@@ -332,17 +337,24 @@ function CustomerDetail({
         <ol className="history-list">
           {chronological.map((entry) => (
             <li key={entry.id}>
-              <span className={`movement-icon ${entry.kind}`} aria-hidden="true">
-                {entry.kind === "credit" ? "↑" : "↓"}
-              </span>
-              <span className="movement-copy">
-                <strong>{entry.kind === "credit" ? "Credit given" : "Payment received"}</strong>
-                <small>{entry.note || new Date(entry.created_at).toLocaleString()}</small>
-              </span>
-              <span className={entry.kind === "credit" ? "credit-amount" : "payment-amount"}>
-                {entry.kind === "credit" ? "+" : "−"}
-                {formatMinorUnits(entry.amount)}
-              </span>
+              <button
+                type="button"
+                onClick={() => setEntryDetail(entry)}
+                style={{ all: "unset", cursor: "pointer", display: "contents" }}
+                aria-label={`View ${entry.kind} of ${formatMinorUnits(entry.amount)}`}
+              >
+                <span className={`movement-icon ${entry.kind}`} aria-hidden="true">
+                  {entry.kind === "credit" ? "↑" : "↓"}
+                </span>
+                <span className="movement-copy">
+                  <strong>{entry.kind === "credit" ? "Credit given" : "Payment received"}</strong>
+                  <small>{entry.note || formatWhen(entry.created_at)}</small>
+                </span>
+                <span className={entry.kind === "credit" ? "credit-amount" : "payment-amount"}>
+                  {entry.kind === "credit" ? "+" : "−"}
+                  {formatMinorUnits(entry.amount)}
+                </span>
+              </button>
             </li>
           ))}
         </ol>
@@ -355,7 +367,84 @@ function CustomerDetail({
           onClose={() => setAction(null)}
         />
       ) : null}
+      {renaming ? (
+        <RenameCustomerForm
+          client={client}
+          customer={customer}
+          onClose={() => setRenaming(false)}
+        />
+      ) : null}
+      {entryDetail ? (
+        <EntryDetail entry={entryDetail} onClose={() => setEntryDetail(null)} />
+      ) : null}
     </section>
+  );
+}
+
+function RenameCustomerForm({
+  client,
+  customer,
+  onClose,
+}: { client: TabkeepClient; customer: CustomerRow; onClose: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = String(new FormData(event.currentTarget).get("name") ?? "").trim();
+    if (!name) return;
+    try {
+      client.mutate.renameCustomer({ id: customer.id, name });
+      onClose();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : String(submitError));
+    }
+  }
+
+  return (
+    <Modal title="Edit customer" onClose={onClose}>
+      <form className="entry-form" onSubmit={submit}>
+        <label>
+          Name
+          <input name="name" defaultValue={customer.name} autoComplete="name" required />
+        </label>
+        {error ? <p className="form-error">{error}</p> : null}
+        <button className="primary-button full" type="submit">
+          Save changes
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function EntryDetail({ entry, onClose }: { entry: LedgerEntryRow; onClose: () => void }) {
+  const isCredit = entry.kind === "credit";
+  return (
+    <Modal title={isCredit ? "Credit given" : "Payment received"} onClose={onClose}>
+      <p className="form-context">{isCredit ? "They owe more" : "They paid you"}</p>
+      <dl className="entry-detail">
+        <div>
+          <dt>Amount</dt>
+          <dd className={isCredit ? "credit-amount" : "payment-amount"}>
+            {isCredit ? "+" : "−"}
+            {formatMinorUnits(entry.amount)}
+          </dd>
+        </div>
+        <div>
+          <dt>Note</dt>
+          <dd>{entry.note || "—"}</dd>
+        </div>
+        <div>
+          <dt>Recorded</dt>
+          <dd>{formatWhen(entry.created_at)}</dd>
+        </div>
+        <div>
+          <dt>Entry id</dt>
+          <dd>
+            <code>{entry.id}</code>
+          </dd>
+        </div>
+      </dl>
+    </Modal>
   );
 }
 
@@ -476,6 +565,11 @@ function Modal({
       </dialog>
     </div>
   );
+}
+
+function formatWhen(value: unknown): string {
+  const date = new Date(value as string | number | Date);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 
 function initials(name: string): string {

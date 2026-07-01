@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -37,6 +38,10 @@ function newId(): string {
   return (
     globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
+}
+function formatWhen(value: unknown): string {
+  const date = new Date(value as string | number | Date);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 function parseMinor(input: string): number | null {
   const m = /^\s*(\d+)(?:\.(\d{1,2}))?\s*$/.exec(input);
@@ -144,7 +149,6 @@ function Ledger({ client }: { client: Client }) {
 
   const [name, setName] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [amount, setAmount] = useState("");
   const [offline, setOffline] = useState(false);
   const selected = customers.find((c) => c.id === selectedId) ?? null;
 
@@ -153,21 +157,24 @@ function Ledger({ client }: { client: Client }) {
     client.onlineDetector.setOnline(!goOffline); // setOnline(false) holds the outbox; (true) flushes
     setOffline(goOffline);
   }
-
   function addCustomer() {
     const trimmed = name.trim();
     if (!trimmed) return;
     client.mutate.addCustomer({ id: newId(), name: trimmed });
     setName("");
   }
-  function record(kind: "credit" | "payment") {
-    if (!selected) return;
-    const minor = parseMinor(amount);
-    if (minor == null) return;
-    const args = { id: newId(), customerId: selected.id, amount: minor };
-    if (kind === "credit") client.mutate.recordCredit(args);
-    else client.mutate.recordPayment(args);
-    setAmount("");
+
+  if (selected) {
+    return (
+      <CustomerDetailScreen
+        client={client}
+        customer={selected}
+        entries={entries.filter((e) => e.customer_id === selected.id)}
+        offline={offline}
+        onToggleOffline={toggleOffline}
+        onBack={() => setSelectedId(null)}
+      />
+    );
   }
 
   return (
@@ -205,44 +212,202 @@ function Ledger({ client }: { client: Client }) {
         ListEmptyComponent={<Text style={styles.muted}>No customers yet. Add one above.</Text>}
         renderItem={({ item }) => {
           const balance = foldLedgerBalance(entries, item.id);
-          const active = item.id === selectedId;
           return (
-            <Pressable
-              style={[styles.row, active && styles.rowActive]}
-              onPress={() => setSelectedId(active ? null : item.id)}
-            >
+            <Pressable style={styles.row} onPress={() => setSelectedId(item.id)}>
               <Text style={styles.rowName}>{item.name}</Text>
-              <Text style={[styles.rowBal, balance > 0 ? styles.owes : styles.settled]}>
-                {balance === 0 ? "settled" : formatMinorUnits(balance)}
-              </Text>
+              <View style={styles.rowRight}>
+                <Text style={[styles.rowBal, balance > 0 ? styles.owes : styles.settled]}>
+                  {balance === 0 ? "settled" : formatMinorUnits(balance)}
+                </Text>
+                <Text style={styles.chevron}>›</Text>
+              </View>
             </Pressable>
           );
         }}
       />
-
-      {selected ? (
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>{selected.name}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Amount e.g. 250.00"
-            placeholderTextColor="#9a9484"
-            keyboardType="decimal-pad"
-            value={amount}
-            onChangeText={setAmount}
-          />
-          <View style={styles.panelBtns}>
-            <Pressable style={[styles.btn, styles.btnCredit]} onPress={() => record("credit")}>
-              <Text style={styles.btnText}>Add credit</Text>
-            </Pressable>
-            <Pressable style={[styles.btn, styles.btnPay]} onPress={() => record("payment")}>
-              <Text style={styles.btnText}>Record payment</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
       <StatusBar style="auto" />
     </SafeAreaView>
+  );
+}
+
+function CustomerDetailScreen({
+  client,
+  customer,
+  entries,
+  offline,
+  onToggleOffline,
+  onBack,
+}: {
+  client: Client;
+  customer: CustomerRow;
+  entries: LedgerEntryRow[];
+  offline: boolean;
+  onToggleOffline: () => void;
+  onBack: () => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [entryDetail, setEntryDetail] = useState<LedgerEntryRow | null>(null);
+  const balance = foldLedgerBalance(entries, customer.id);
+  const chronological = [...entries].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
+  function record(kind: "credit" | "payment") {
+    const minor = parseMinor(amount);
+    if (minor == null) return;
+    const args = { id: newId(), customerId: customer.id, amount: minor };
+    if (kind === "credit") client.mutate.recordCredit(args);
+    else client.mutate.recordPayment(args);
+    setAmount("");
+  }
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.header}>
+        <Pressable onPress={onBack}>
+          <Text style={styles.back}>← All customers</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.netToggle, offline ? styles.netOffline : styles.netOnline]}
+          onPress={onToggleOffline}
+        >
+          <Text style={styles.netToggleText}>{offline ? "● Offline" : "● Online"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.hero}>
+        <View style={styles.heroLeft}>
+          <Text style={styles.eyebrow}>RUNNING TAB</Text>
+          <Text style={styles.brand}>{customer.name}</Text>
+          <Pressable onPress={() => setRenaming(true)}>
+            <Text style={styles.link}>✎ Edit name</Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.heroBalance, balance > 0 ? styles.owes : styles.settled]}>
+          {balance === 0 ? "settled" : formatMinorUnits(balance)}
+        </Text>
+      </View>
+
+      <TextInput
+        style={styles.input}
+        placeholder="Amount e.g. 250.00"
+        placeholderTextColor="#9a9484"
+        keyboardType="decimal-pad"
+        value={amount}
+        onChangeText={setAmount}
+      />
+      <View style={styles.panelBtns}>
+        <Pressable style={[styles.btn, styles.btnCredit]} onPress={() => record("credit")}>
+          <Text style={styles.btnText}>Add credit</Text>
+        </Pressable>
+        <Pressable style={[styles.btn, styles.btnPay]} onPress={() => record("payment")}>
+          <Text style={styles.btnText}>Record payment</Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.histHeading}>Ledger history · {chronological.length}</Text>
+      <FlatList
+        data={chronological}
+        keyExtractor={(e) => e.id}
+        ListEmptyComponent={<Text style={styles.muted}>No entries yet. Add credit above.</Text>}
+        renderItem={({ item }) => (
+          <Pressable style={styles.histRow} onPress={() => setEntryDetail(item)}>
+            <Text style={styles.histKind}>
+              {item.kind === "credit" ? "Credit given" : "Payment received"}
+            </Text>
+            <Text style={item.kind === "credit" ? styles.owes : styles.settled}>
+              {item.kind === "credit" ? "+" : "−"}
+              {formatMinorUnits(item.amount)}
+            </Text>
+          </Pressable>
+        )}
+      />
+
+      <RenameModal
+        visible={renaming}
+        customer={customer}
+        client={client}
+        onClose={() => setRenaming(false)}
+      />
+      <EntryDetailModal entry={entryDetail} onClose={() => setEntryDetail(null)} />
+      <StatusBar style="auto" />
+    </SafeAreaView>
+  );
+}
+
+function RenameModal({
+  visible,
+  customer,
+  client,
+  onClose,
+}: { visible: boolean; customer: CustomerRow; client: Client; onClose: () => void }) {
+  const [value, setValue] = useState(customer.name);
+  useEffect(() => setValue(customer.name), [customer.name]);
+  function save() {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    client.mutate.renameCustomer({ id: customer.id, name: trimmed });
+    onClose();
+  }
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <Text style={styles.modalTitle}>Edit customer</Text>
+          <TextInput
+            style={[styles.input, styles.modalInput]}
+            value={value}
+            onChangeText={setValue}
+            autoFocus
+          />
+          <View style={styles.panelBtns}>
+            <Pressable style={[styles.btn, styles.btnPay]} onPress={save}>
+              <Text style={styles.btnText}>Save</Text>
+            </Pressable>
+            <Pressable style={[styles.btn, styles.btnCredit]} onPress={onClose}>
+              <Text style={styles.btnText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function EntryDetailModal({
+  entry,
+  onClose,
+}: { entry: LedgerEntryRow | null; onClose: () => void }) {
+  const isCredit = entry?.kind === "credit";
+  return (
+    <Modal visible={entry != null} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <Text style={styles.modalTitle}>{isCredit ? "Credit given" : "Payment received"}</Text>
+          {entry ? (
+            <View style={{ gap: 8 }}>
+              <DetailRow label="Amount" value={`${isCredit ? "+" : "−"}${formatMinorUnits(entry.amount)}`} />
+              <DetailRow label="Note" value={entry.note || "—"} />
+              <DetailRow label="Recorded" value={formatWhen(entry.created_at)} />
+              <DetailRow label="Entry id" value={entry.id} />
+            </View>
+          ) : null}
+          <Pressable style={[styles.btn, styles.btnCredit]} onPress={onClose}>
+            <Text style={styles.btnText}>Close</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -317,4 +482,58 @@ const styles = StyleSheet.create({
   btnText: { fontWeight: "700", color: "#1d1b16", fontSize: 15 },
   muted: { color: "#6f6a5c", fontSize: 15, textAlign: "center", marginTop: 12 },
   error: { fontSize: 18, fontWeight: "700", color: "#b00020" },
+  rowRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  chevron: { color: "#b0a892", fontSize: 22, fontWeight: "700" },
+  back: { color: "#8a6a1f", fontSize: 16, fontWeight: "700" },
+  hero: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  heroLeft: { flex: 1, gap: 4 },
+  heroBalance: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  link: { color: "#8a6a1f", fontWeight: "700", fontSize: 14, marginTop: 4 },
+  histHeading: {
+    fontSize: 13,
+    letterSpacing: 1,
+    color: "#6f6a5c",
+    fontWeight: "700",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  histRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e4ddca",
+  },
+  histKind: { fontSize: 16, color: "#1d1b16", fontWeight: "600" },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(29,27,22,0.35)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#fffdf7",
+    borderRadius: 16,
+    padding: 20,
+    gap: 14,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "700", color: "#1d1b16" },
+  // base input uses flex:1 for the add-row; inside the auto-height modal card that collapses to ~0
+  // height and hides the text — pin it to its natural single-line height instead.
+  modalInput: { flex: 0, alignSelf: "stretch" },
+  detailRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  detailLabel: { color: "#6f6a5c", fontSize: 14 },
+  detailValue: {
+    color: "#1d1b16",
+    fontSize: 14,
+    fontWeight: "600",
+    flexShrink: 1,
+    textAlign: "right",
+  },
 });
