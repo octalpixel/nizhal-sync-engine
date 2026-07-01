@@ -1,0 +1,23 @@
+{
+  "name": "local-notes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@nizhal/local": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "wa-sqlite": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "drizzle-kit": "^0.31.5",
+    "typescript": "^5.9.2",
+    "vite": "^6.0.5"
+  }
+}

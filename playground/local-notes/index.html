@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Notes — @nizhal/local</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+      form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+      input { flex: 1; padding: 0.5rem; }
+      li { display: flex; justify-content: space-between; padding: 0.25rem 0; }
+      #status { color: #666; font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Local Notes</h1>
+    <p id="status">booting…</p>
+    <form id="add-form">
+      <input id="add-input" placeholder="Write a note…" autocomplete="off" />
+      <button type="submit">Add</button>
+    </form>
+    <ul id="notes"></ul>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

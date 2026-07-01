@@ -2,6 +2,10 @@
 
 Public surface for the four `@nizhal/*` packages. Types are generated from `GET /nizhal/contract` via `nizhal gen` (planned); do not import server Drizzle schema on the client.
 
+For **purely local apps** (no server, no sync) there is a fifth, standalone package —
+[`@nizhal/local`](./local.md): native Drizzle schema/migrations/queries on-device with live
+queries, on expo-sqlite, op-sqlite, and browser wa-sqlite.
+
 ## `@nizhal/kernel`
 
 Schema, mutators, sync rules, and contract emission.

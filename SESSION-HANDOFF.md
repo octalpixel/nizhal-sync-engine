@@ -3,6 +3,21 @@
 **Branch:** `main` (local) → pushed to `nizhal-engine/main` and origin's `fix/sync-engine-data-loss`, both at `de73a1b`. Tree clean.
 **Repo:** `/Users/mithushancj/Documents/personal/echo` (pnpm + turbo monorepo).
 
+## Update (2026-07-02 session) — Arc C: `@nizhal/local` (local-only native-Drizzle DX)
+
+Shipped a new standalone package **`@nizhal/local`** (WatermelonDB-class DX for purely local
+apps: drizzle-kit migrations applied on-device, real Drizzle query builder, cross-platform live
+queries — expo-sqlite / op-sqlite / browser wa-sqlite) plus the **`playground/local-notes`**
+reference app (verified live in Chrome via Argent: insert/delete live re-render, reload
+persistence). Zero sync-engine diffs. Docs: `docs/local.md`; decisions:
+`local-drizzle-implementation-notes.md`. Gates after: check-types 22/22, lint 0,
+server 74 passed, db-collection 109 passed, @nizhal/local 13/13.
+
+**Arc B (multi-tab) remains where the list below left it** (#28–#30 open). Priority call made
+this session (build-for-one): Arc C was the user's explicit ask and shipped first; before
+resuming Arc B, decide caveat 1 below (refactor `createNizhalMutators` to be
+shared-outbox-capable vs continuing the duplicate engine in `client-group.ts`).
+
 ## What this session delivered (all committed + pushed)
 
 Two arcs. Reference the commits/RFCs — don't re-read them wholesale.

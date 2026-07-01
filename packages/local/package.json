@@ -1,0 +1,57 @@
+{
+  "name": "@nizhal/local",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./expo-sqlite": {
+      "types": "./dist/expo-sqlite.d.ts",
+      "default": "./dist/expo-sqlite.js"
+    },
+    "./op-sqlite": {
+      "types": "./dist/op-sqlite.d.ts",
+      "default": "./dist/op-sqlite.js"
+    },
+    "./wa-sqlite": {
+      "types": "./dist/wa-sqlite.d.ts",
+      "default": "./dist/wa-sqlite.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.0.0",
+    "better-sqlite3": "^12.11.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wa-sqlite": "^1.0.0"
+  }
+}
