@@ -94,7 +94,11 @@ export function createNizhalClient(config: NizhalClientConfig): NizhalClient {
   let lastMutationId = 0;
 
   const authState = createNizhalAuthState(config.auth);
-  const syncTarget = config.syncTarget ?? httpSyncTargetWithAuthState(resolveServer, authState);
+  const syncTarget =
+    config.syncTarget ??
+    httpSyncTargetWithAuthState(resolveServer, authState, {
+      contractVersion: config.contractVersion,
+    });
   const bucketResolver = config.bucketsForSyncRule ?? (() => []);
   const subscribeSource =
     config.subscribeSource ??

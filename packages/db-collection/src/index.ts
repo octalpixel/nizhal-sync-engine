@@ -26,6 +26,7 @@ export type {
 } from "./websocket-source.js";
 export { NizhalSyncTargetError, httpSyncTarget } from "./sync-target.js";
 export type {
+  HttpSyncTargetOptions,
   NizhalPullRequest,
   NizhalPullResponse,
   NizhalPushRequest,

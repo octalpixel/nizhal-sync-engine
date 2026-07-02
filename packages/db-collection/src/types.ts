@@ -72,6 +72,11 @@ export interface NizhalClientConfig {
   deviceId?: string;
   /** When set, resolves the server base URL on each request (for chaos/restart harnesses). */
   getServer?: () => string | undefined;
+  /**
+   * This client build's contract/schema version, sent to the server so it can reject a client older
+   * than its `minClientVersion` with a typed `upgrade_required`. Bake in the shared domain's version.
+   */
+  contractVersion?: string;
   auth?: NizhalAuthConfig | unknown;
   /** Test/dev: wire realtime without a live `/sync/stream` endpoint. */
   subscribeSource?: NizhalSubscribeSource;

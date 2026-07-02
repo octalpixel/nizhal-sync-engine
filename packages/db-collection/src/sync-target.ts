@@ -32,12 +32,24 @@ export interface NizhalSyncTarget {
 
 export class NizhalSyncTargetError extends Error {
   readonly retriable: boolean;
+  /** Machine-readable cause, e.g. `"upgrade_required"` for a 426 from a fleet-version gate. */
+  readonly code?: string;
 
-  constructor(message: string, options: { retriable: boolean; cause?: unknown }) {
+  constructor(message: string, options: { retriable: boolean; code?: string; cause?: unknown }) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "NizhalSyncTargetError";
     this.retriable = options.retriable;
+    this.code = options.code;
   }
+}
+
+/** Options for the built-in HTTP sync target. */
+export interface HttpSyncTargetOptions {
+  /**
+   * This client's contract/schema version, sent as `x-nizhal-contract-version` so the server can
+   * reject a client older than its `minClientVersion` with a `426` (see NizhalServerConfig).
+   */
+  contractVersion?: string;
 }
 
 export interface NizhalAuthState {
@@ -50,8 +62,9 @@ type ServerSource = string | (() => string | undefined);
 export function httpSyncTarget(
   server: ServerSource,
   auth?: NizhalAuthConfig | unknown,
+  options?: HttpSyncTargetOptions,
 ): NizhalSyncTarget {
-  return httpSyncTargetWithAuthState(server, createNizhalAuthState(auth));
+  return httpSyncTargetWithAuthState(server, createNizhalAuthState(auth), options);
 }
 
 // RFC-011 F-C: a push/pull fetch that never settles (stalled connection, serverless cold-start, dropped
@@ -87,7 +100,11 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
 export function httpSyncTargetWithAuthState(
   server: ServerSource,
   auth: NizhalAuthState,
+  options?: HttpSyncTargetOptions,
 ): NizhalSyncTarget {
+  const versionHeaders: Record<string, string> = options?.contractVersion
+    ? { "x-nizhal-contract-version": options.contractVersion }
+    : {};
   const resolveServer = () => {
     const configured = typeof server === "function" ? server() : server;
     return configured?.replace(/\/$/, "");
@@ -117,7 +134,7 @@ export function httpSyncTargetWithAuthState(
     async pull(request) {
       const response = await fetchWithAuthRetry("/sync/pull", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...versionHeaders },
         body: JSON.stringify({
           cursor: request.cursor,
           syncRule: request.syncRule,
@@ -139,9 +156,18 @@ export function httpSyncTargetWithAuthState(
     async push(request) {
       const response = await fetchWithAuthRetry("/sync/push", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...versionHeaders },
         body: JSON.stringify({ mutations: [request] }),
       });
+      if (response.status === 426) {
+        const result = await readJsonRecord(response);
+        const message =
+          typeof result.error === "string" ? result.error : "client version no longer supported";
+        // Retriable + typed: the durable write is preserved and flushes once the app is upgraded —
+        // never parked (the mutation is fine; the CLIENT is out of date). The app reads `code` to
+        // prompt an update. See NizhalServerConfig.minClientVersion.
+        throw new NizhalSyncTargetError(message, { retriable: true, code: "upgrade_required" });
+      }
       if (response.status === 409) {
         const result = await readJsonRecord(response);
         const lastMutationId = responseMutationSequence(result, request.clientID);

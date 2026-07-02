@@ -117,6 +117,14 @@ export interface NizhalServerConfig {
    * offline longer than this re-bootstraps on return instead of receiving the pruned deletions.
    */
   tombstoneRetention?: number | false;
+  /** This server's contract/schema version, published in the contract (default `"0.0.0"`). */
+  contractVersion?: string;
+  /**
+   * The oldest client `contractVersion` this server accepts writes from (default `"0.0.0"` = accept
+   * all). A push from an older client is rejected with `426` + `{ code: "upgrade_required" }` — the
+   * fleet-safety valve for shipping a breaking schema change (bump this in the second release).
+   */
+  minClientVersion?: string;
 }
 
 export interface NizhalServer {
@@ -244,10 +252,13 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
   }
   const limits = normalizeLimits(config.limits);
   const rateLimiter = createRateLimiter(limits.rateLimit);
+  const contractVersion = config.contractVersion ?? "0.0.0";
+  const minClientVersion = config.minClientVersion ?? "0.0.0";
   const contract = emitNizhalContract({
     schema: config.schema,
     mutators: config.mutators,
     syncRules: config.syncRules,
+    version: contractVersion,
   });
   const serverHlc = createHlcClock({ nodeId: crypto.randomUUID() });
   const mergePolicies = collectMergePolicies(config.schema);
@@ -425,6 +436,21 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
     const rawBody = await readBodyText(c.req.raw, limits.maxBodyBytes);
     if (rawBody === BODY_TOO_LARGE) return c.json({ error: "payload too large" }, 413);
     if (!rateLimiter.allow(actor)) return c.json({ error: "rate limit exceeded" }, 429);
+    // Fleet-version gate (T15): a client older than minClientVersion cannot safely write against the
+    // current schema. Reject with a typed 426 the client surfaces as `upgrade_required` — its durable
+    // outbox is untouched and flushes once the app updates.
+    const clientVersion = c.req.header("x-nizhal-contract-version") ?? "0.0.0";
+    if (compareVersions(clientVersion, minClientVersion) < 0) {
+      return c.json(
+        {
+          error: `client contract ${clientVersion} is older than the minimum supported ${minClientVersion}`,
+          code: "upgrade_required",
+          contractVersion,
+          minClientVersion,
+        },
+        426,
+      );
+    }
     const body = parseJsonBody(rawBody) as { mutations?: Mutation[] };
     const mutations = body.mutations ?? [];
     const applied: string[] = [];
@@ -665,6 +691,19 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
       return server;
     },
   };
+}
+
+/** Compare two dotted versions ("1.2.0"). Returns <0 / 0 / >0. Missing or non-numeric parts = 0. */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split(".");
+  const pb = b.split(".");
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i += 1) {
+    const na = Number.parseInt(pa[i] ?? "0", 10) || 0;
+    const nb = Number.parseInt(pb[i] ?? "0", 10) || 0;
+    if (na !== nb) return na - nb;
+  }
+  return 0;
 }
 
 interface FieldConflict {
