@@ -45,10 +45,11 @@ import {
   WriteAuthorizationError,
   postgresStorage,
 } from "./adapters/storage.js";
-import { type NizhalDb, executeRows, whereToPredicate } from "./drizzle-db.js";
+import { type NizhalDb, executeRows, toNizhalDb, whereToPredicate } from "./drizzle-db.js";
 import {
   type BufferedJobScheduler,
   type JobRegistryInput,
+  type JobTask,
   createJobScheduler,
   createJobWorker,
   normalizeTasks,
@@ -61,6 +62,12 @@ import {
   noopObserver,
   safeObserver,
 } from "./observer.js";
+import {
+  DEFAULT_TOMBSTONE_GC_INTERVAL_MS,
+  DEFAULT_TOMBSTONE_RETENTION_MS,
+  createTombstoneGcTask,
+  seedTombstoneGc,
+} from "./tombstone-gc.js";
 
 export interface NizhalAuth {
   /** Resolve the authenticated actor from a request (returns null to reject). */
@@ -104,6 +111,12 @@ export interface NizhalServerConfig {
   };
   /** Persist the full applied-mutation envelope in the append-only audit log. */
   audit?: boolean;
+  /**
+   * How long deleted rows' tombstones are retained before the built-in GC prunes them and advances
+   * the resync horizon (ms). Default 30 days (D4). `false` disables the built-in GC entirely. A client
+   * offline longer than this re-bootstraps on return instead of receiving the pruned deletions.
+   */
+  tombstoneRetention?: number | false;
 }
 
 export interface NizhalServer {
@@ -187,12 +200,35 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
     inProcessRealtime({ heartbeatTimeoutMs: config.presence?.heartbeatTimeoutMs });
   const observer = safeObserver(config.observer ?? noopObserver);
   const blob = config.blob;
-  const jobTasks = normalizeTasks(config.jobs);
+  // Built-in tombstone GC (D4): a self-perpetuating job that prunes aged tombstones + advances the
+  // resync horizon. On by default (30d); `tombstoneRetention: false` opts out. Needs a client to run
+  // against — custom storages without getClient can register their own GC via config.jobs instead.
+  const gcClient = storage.getClient?.();
+  const gcRetentionMs =
+    config.tombstoneRetention === false
+      ? null
+      : (config.tombstoneRetention ?? DEFAULT_TOMBSTONE_RETENTION_MS);
+  const gcDb = gcRetentionMs !== null && gcClient ? toNizhalDb(gcClient).db : null;
+  const gcTask =
+    gcDb && gcRetentionMs !== null
+      ? createTombstoneGcTask({ db: gcDb, retentionMs: gcRetentionMs })
+      : null;
+  const appTasks: JobTask[] = Array.isArray(config.jobs)
+    ? config.jobs
+    : config.jobs
+      ? Object.entries(config.jobs).map(([slug, task]) =>
+          typeof task === "function"
+            ? { slug, run: task }
+            : { slug, run: task.run, maxAttempts: task.maxAttempts },
+        )
+      : [];
+  const allTasks: JobTask[] = gcTask ? [...appTasks, gcTask] : appTasks;
+  const jobTasks = normalizeTasks(allTasks);
   const jobWorker =
     jobTasks.size > 0
       ? createJobWorker({
           connectionString: config.db,
-          tasks: config.jobs ?? {},
+          tasks: allTasks,
           client: storage.getClient?.(),
           closeClientOnStop: storage.getClient ? false : undefined,
         })
@@ -612,6 +648,7 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
     app,
     listen(port) {
       jobWorker?.start();
+      if (gcDb) void seedTombstoneGc(gcDb, DEFAULT_TOMBSTONE_GC_INTERVAL_MS);
       const server = serve({ fetch: app.fetch, port });
       injectWebSocket(server);
       const close = server.close.bind(server);
@@ -792,6 +829,8 @@ function isDeterministicAppError(error: unknown): boolean {
 export * from "./adapters/index.js";
 export * from "./auth.js";
 export * from "./jobs.js";
+export * from "./tombstone-gc.js";
+export { toNizhalDb } from "./drizzle-db.js";
 export type { NizhalDb } from "./drizzle-db.js";
 
 function normalizeLimits(config: NizhalServerConfig["limits"] | undefined): {

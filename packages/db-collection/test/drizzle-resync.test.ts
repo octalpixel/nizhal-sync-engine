@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { defineMutator, defineMutators, defineSyncRules, z } from "@nizhal/kernel";
-import { type NizhalAuth, createNizhalServer } from "@nizhal/server";
+import {
+  DEFAULT_TOMBSTONE_RETENTION_MS,
+  type NizhalAuth,
+  createNizhalServer,
+  runTombstoneGc,
+  toNizhalDb,
+} from "@nizhal/server";
 import { postgresStorage } from "@nizhal/server/adapters";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -184,6 +190,50 @@ describe("P2 resync — server epoch + GC horizon (real server on pglite)", () =
     await b.store.pullNow();
     // g1 does NOT resurrect (upsert-only apply would have kept it); g2 remains.
     expect(ids(await b.store.db.select().from(b.store.tables.notes))).toEqual(["g2"]);
+  });
+
+  it("T11: fleet-return — a client offline while its deletions were GC'd returns, re-bootstraps, and replays its pending outbox", async () => {
+    const harness = await createHarness();
+    const a = await harness.openStore({ file: "fleet-a.db" });
+    const b = await harness.openStore({ file: "fleet-b.db" });
+
+    a.store.mutate.addNote({ id: "f1", body: "one" });
+    a.store.mutate.addNote({ id: "f2", body: "two" });
+    await a.store.waitForIdle();
+    await b.store.pullNow();
+    expect(ids(await b.store.db.select().from(b.store.tables.notes))).toEqual(["f1", "f2"]);
+
+    // B goes offline "for 3 months" and writes f3 locally; meanwhile A deletes f1 (a real tombstone).
+    b.detector.setOnline(false);
+    b.store.mutate.addNote({ id: "f3", body: "written while away" });
+    await vi.waitFor(async () => expect(await b.store.getPendingCount()).toBe(1));
+    a.store.mutate.removeNote({ id: "f1" });
+    await a.store.waitForIdle();
+
+    // Age f1's tombstone past the retention window, then run the REAL GC job: it prunes the tombstone
+    // and advances the horizon past B's (now stale) cursor.
+    await harness.query(
+      "update _nizhal_tombstones set deleted_at = now() - interval '90 days' where row_id = 'f1'",
+    );
+    const gc = await runTombstoneGc(toNizhalDb(harness.pg).db, DEFAULT_TOMBSTONE_RETENTION_MS);
+    expect(gc.pruned).toBe(1);
+    expect(gc.horizon).not.toBeNull();
+
+    // B returns: its pre-horizon cursor → cursorReset → wipe + re-hydrate (f2 only — f1's tombstone
+    // is gone but must NOT resurrect) → outbox replay re-establishes the pending f3.
+    b.detector.setOnline(true);
+    await b.store.pullNow();
+    await b.store.waitForIdle();
+    expect(ids(await b.store.db.select().from(b.store.tables.notes))).toEqual(["f2", "f3"]);
+    expect(await b.store.getPendingCount()).toBe(0);
+
+    // Whole fleet converges: f3 reached the server, f1 stayed deleted.
+    const reader = await harness.openStore({ file: "fleet-reader.db" });
+    await reader.store.pullNow();
+    expect(ids(await reader.store.db.select().from(reader.store.tables.notes))).toEqual([
+      "f2",
+      "f3",
+    ]);
   });
 });
 
