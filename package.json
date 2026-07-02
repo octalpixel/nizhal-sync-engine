@@ -11,6 +11,7 @@
     "dev": "turbo run dev",
     "check-types": "turbo run check-types",
     "test": "turbo run test --concurrency=1",
+    "chaos": "pnpm --filter @nizhal/db-collection exec vitest run test/chaos",
     "lint": "biome check .",
     "format": "biome format --write .",
     "version": "changeset version",
