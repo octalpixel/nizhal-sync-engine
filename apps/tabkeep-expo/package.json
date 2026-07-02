@@ -16,7 +16,7 @@
     "@nizhal/db-collection": "workspace:*",
     "@nizhal/kernel": "workspace:*",
     "@nizhal/react-native": "workspace:*",
-    "@op-engineering/op-sqlite": "^17.0.0",
+    "@op-engineering/op-sqlite": "17.0.0",
     "@react-native-community/netinfo": "^11.5.2",
     "drizzle-orm": "^0.45.2",
     "expo": "~56.0.12",

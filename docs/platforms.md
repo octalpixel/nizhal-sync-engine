@@ -87,6 +87,30 @@ This is not a Nizhal limitation; it is what offline-first means under SSR: the s
 the shell, the device owns the data. The server side of these frameworks can still host the
 Nizhal sync server (it's a Hono app) or proxy to one.
 
+## Driver compatibility matrix & pinning policy
+
+The ecosystem drifts; Nizhal absorbs the drift at the adapter so apps don't. Verified state
+(2026-07-02, drizzle-orm 0.45.2 = latest):
+
+| Combination | Status | Use |
+|---|---|---|
+| drizzle-orm 0.45.x + op-sqlite **17.x** | **broken upstream** — drizzle's driver calls the pre-v11 API (`executeAsync`/`executeRawAsync`, `rows._array`); op-sqlite closed [#424](https://github.com/OP-Engineering/op-sqlite/issues/424) as intentional ("wait until drizzle updates its adapter") and drizzle [#5928](https://github.com/drizzle-team/drizzle-orm/issues/5928) is open | **`opSqliteDrizzle(raw)`** from `@nizhal/local/op-sqlite` — the shim presents exactly the surface drizzle consumes; contract-tested in CI against both 17.0 (object) and 17.1 (array) `executeRaw` shapes (`packages/local/test/op-sqlite-shim.test.ts`) |
+| drizzle-orm 0.45.x + op-sqlite ≤16.2.2 | works with drizzle's stock driver | `drizzle(raw)` directly (or the shim — it degrades gracefully) |
+| drizzle-orm 0.45.x + expo-sqlite | works with drizzle's stock driver | `drizzle(expo)` |
+| drizzle-orm 0.45.x + wa-sqlite 1.x | no upstream driver exists (drizzle [#193](https://github.com/drizzle-team/drizzle-orm/issues/193) open) | `waSqliteDrizzle` from `@nizhal/local/wa-sqlite` |
+
+Pinning policy:
+- **drizzle-orm** is pinned repo-wide via the root pnpm override (`^0.45.2`); bump deliberately —
+  when [#5928](https://github.com/drizzle-team/drizzle-orm/issues/5928) is fixed upstream, the
+  shim's contract test will fail loudly on the drizzle side of the contract, which is the signal
+  to re-evaluate (the shim can then be retired or kept as a pass-through).
+- **op-sqlite**: apps should pin **exact** (native module — the JS half must match the binary the
+  app was built with; tabkeep pins `17.0.0`). Supported range for the shim: `>=17 <18`.
+- **UUIDs on Hermes**: the client uses `safeRandomUUID` (native `crypto.randomUUID` → v4 over
+  `getRandomValues` → non-crypto fallback only when no crypto exists at all). Expo SDK ≥54 ships
+  `crypto.randomUUID`; bare React Native apps should add `react-native-get-random-values` for
+  crypto-grade ids.
+
 ## Known follow-ups
 
 - `@nizhal/local` web bootstrap helper (`openWebDatabase({ name, wasmUrl })`) to collapse the
