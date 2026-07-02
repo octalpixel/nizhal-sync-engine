@@ -5,6 +5,8 @@ Drizzle `sqliteTable` schema, generate migrations with **drizzle-kit**, apply th
 query with the **real Drizzle query builder**, and get **live queries** — uniformly on React
 Native (expo-sqlite, op-sqlite) and the browser (wa-sqlite). No server, no sync rules, no outbox.
 
+Platform/bundler recipes (incl. Vite, Next.js, TanStack Start): [`platforms.md`](./platforms.md).
+
 This is a separate data plane from the sync engine (`@nizhal/db-collection` stores synced rows in
 its own client store). `@nizhal/local` has zero dependency on it — pick it when the app is
 local-only. Working example: [`playground/local-notes`](../playground/local-notes) (Vite +
