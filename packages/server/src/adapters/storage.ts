@@ -118,6 +118,10 @@ export interface StorageAdapter {
     audit?: boolean;
   }): Promise<void>;
   getClient?(): PostgresClient | PgliteClient | DrizzleClient;
+  /** Read an engine-meta value (`_nizhal_meta`); null if absent. Used by `nizhal migrate` (T16). */
+  readEngineMeta?(key: string): Promise<string | null>;
+  /** Upsert an engine-meta value (`_nizhal_meta`). Requires the engine to be provisioned. */
+  writeEngineMeta?(key: string, value: string): Promise<void>;
 }
 
 export interface ProvisionPlan {
@@ -327,6 +331,23 @@ export function postgresStorage(opts: PostgresStorageOptions): StorageAdapter {
     },
     getClient() {
       return rawClient;
+    },
+    async readEngineMeta(key) {
+      try {
+        const rows = await executeRows<{ value: string }>(
+          db,
+          sql`select value from _nizhal_meta where key = ${key}`,
+        );
+        return rows[0]?.value ?? null;
+      } catch {
+        return null; // _nizhal_meta not provisioned yet — no snapshot to compare against
+      }
+    },
+    async writeEngineMeta(key, value) {
+      await db.execute(
+        sql`insert into _nizhal_meta (key, value) values (${key}, ${value})
+            on conflict (key) do update set value = excluded.value, updated_at = now()`,
+      );
     },
   };
 }

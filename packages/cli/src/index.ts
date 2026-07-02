@@ -1,9 +1,18 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ContractSchemaSource, SyncRules } from "@nizhal/kernel";
+import {
+  type BreakingChange,
+  type ContractSchemaSource,
+  type SyncRules,
+  type SyncedSchemaSnapshot,
+  diffSyncedSchema,
+  syncedSchemaSnapshot,
+} from "@nizhal/kernel";
 import { type StorageAdapter, postgresStorage } from "@nizhal/server/adapters";
 import { createJiti } from "jiti";
+
+const SYNCED_SCHEMA_SNAPSHOT_KEY = "synced_schema";
 
 const notImplemented = (cmd: string, chunk: string): never => {
   throw new Error(`[@nizhal/cli] '${cmd}' not implemented — ${chunk}; see rfcs/RFC-001-nizhal.md`);
@@ -57,6 +66,30 @@ export async function migrate(
   const storage =
     config.storage ??
     postgresStorage({ connectionString: requireValue(connectionString, "database URL") });
+
+  // Additive-only guard (T16): diff the synced-column shape against the previous migrate. Breaking
+  // shapes (drop/rename/retype/new-NOT-NULL-without-default) an un-updatable client cannot survive are
+  // rejected unless --allow-breaking. Skipped when the adapter can't persist a snapshot.
+  const canSnapshot =
+    typeof storage.readEngineMeta === "function" && typeof storage.writeEngineMeta === "function";
+  let nextSnapshot: SyncedSchemaSnapshot | undefined;
+  let breaks: BreakingChange[] = [];
+  if (canSnapshot && storage.readEngineMeta) {
+    nextSnapshot = syncedSchemaSnapshot(config.schema, config.syncRules);
+    const prevRaw = await storage.readEngineMeta(SYNCED_SCHEMA_SNAPSHOT_KEY);
+    const prev = prevRaw ? (JSON.parse(prevRaw) as SyncedSchemaSnapshot) : {};
+    breaks = diffSyncedSchema(prev, nextSnapshot);
+    if (breaks.length > 0 && !parsed.allowBreaking) {
+      throw new Error(
+        `nizhal migrate: ${breaks.length} breaking synced-schema change(s) an un-updatable client cannot survive:\n${breaks
+          .map((change) => `  • ${change.message}`)
+          .join(
+            "\n",
+          )}\nBump the server's minClientVersion (so old clients get a typed upgrade_required instead of corrupt data), then re-run with --allow-breaking.`,
+      );
+    }
+  }
+
   try {
     await storage.provision({
       schema: config.schema,
@@ -70,6 +103,15 @@ export async function migrate(
       );
     }
     throw error;
+  }
+
+  if (canSnapshot && storage.writeEngineMeta && nextSnapshot) {
+    await storage.writeEngineMeta(SYNCED_SCHEMA_SNAPSHOT_KEY, JSON.stringify(nextSnapshot));
+  }
+  if (breaks.length > 0 && parsed.allowBreaking) {
+    io.log(
+      `nizhal migrate: applied ${breaks.length} BREAKING synced-schema change(s) with --allow-breaking. Bump the server's minClientVersion so pre-upgrade clients are blocked with upgrade_required.`,
+    );
   }
   io.log("nizhal migrate complete");
 }
@@ -117,13 +159,19 @@ function isMissingRelationError(error: unknown): boolean {
   return false;
 }
 
-function parseArgs(args: string[]): { config?: string; db?: string; yes?: boolean } {
-  const parsed: { config?: string; db?: string; yes?: boolean } = {};
+function parseArgs(args: string[]): {
+  config?: string;
+  db?: string;
+  yes?: boolean;
+  allowBreaking?: boolean;
+} {
+  const parsed: { config?: string; db?: string; yes?: boolean; allowBreaking?: boolean } = {};
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--config") parsed.config = requireValue(args[++index], "--config value");
     else if (arg === "--db") parsed.db = requireValue(args[++index], "--db value");
     else if (arg === "--yes" || arg === "-y") parsed.yes = true;
+    else if (arg === "--allow-breaking") parsed.allowBreaking = true;
     else throw new Error(`Unknown nizhal option '${arg}'`);
   }
   return parsed;
