@@ -1,0 +1,21 @@
+{
+  "name": "pos-existing-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/api.ts",
+    "check-types": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.14",
+    "better-sqlite3": "^12.11.1",
+    "hono": "^4.12.27"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.2"
+  }
+}

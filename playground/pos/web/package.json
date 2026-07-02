@@ -1,0 +1,21 @@
+{
+  "name": "pos-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check-types": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nizhal/db-collection": "workspace:*",
+    "@nizhal/kernel": "workspace:*",
+    "@nizhal/local": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "wa-sqlite": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^6.0.5"
+  }
+}

@@ -236,6 +236,8 @@ already loss-tested rather than a second brownfield-special path.
   poke natively.
 
 Decision rule: control infra → B1; PG-but-no-taint → B1s; no infra / closed → B2.
+**B2 working demo:** `playground/pos` — offline POS syncing with a plain Hono REST API
+through a custom `NizhalSyncTarget` (verified live 2026-07-02).
 
 ### Framework-owned backends (Medusa, porulle): B1s + read-model sync
 
