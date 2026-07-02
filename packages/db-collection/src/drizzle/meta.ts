@@ -1,5 +1,6 @@
 import type { Cursor } from "@nizhal/kernel";
 import { eq } from "drizzle-orm";
+import { safeRandomUUID } from "../client.js";
 import type { DeadLetterStorage } from "../dead-letter.js";
 import type { MutationIdStorage } from "../mutation-id.js";
 import type { NizhalPoisonEntry } from "../types.js";
@@ -41,7 +42,7 @@ export function createMetaStore(db: AnyDrizzleSqliteDb): NizhalMetaStore {
     getOrCreateClientId: async () => {
       const existing = await read(CLIENT_ID_KEY);
       if (existing) return existing;
-      const id = crypto.randomUUID();
+      const id = safeRandomUUID();
       await write(db, CLIENT_ID_KEY, id);
       return id;
     },

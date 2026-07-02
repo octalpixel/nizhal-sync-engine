@@ -501,7 +501,7 @@ function noRemoteSubscribeSource(): NizhalSubscribeSource {
  * so fall back to a `getRandomValues`-backed v4 UUID. Keeps the client transport-agnostic without
  * pushing a polyfill onto every consumer.
  */
-function safeRandomUUID(): string {
+export function safeRandomUUID(): string {
   const c = (
     globalThis as {
       crypto?: { randomUUID?: () => string; getRandomValues?: (a: Uint8Array) => Uint8Array };

@@ -16,7 +16,14 @@ const nativeImport = new Function("u", "return import(u)") as (
 // (durable across reloads, no COOP/COEP needed). The wasm binary is fetched from /public so the
 // emscripten glue never needs import.meta URL resolution at runtime.
 export async function openTabkeepDatabase(): Promise<TabkeepDatabase | undefined> {
-  const { default: SQLiteESMFactory } = await nativeImport("/wa-sqlite-async.mjs");
+  // Absolute URL: relative specifiers inside a Function-constructed import can resolve against a
+  // stale base in dev (observed live: an 8082 page importing from 8081); anchor to the page origin.
+  const { default: SQLiteESMFactory } = await nativeImport(
+    new URL("/wa-sqlite-async.mjs", globalThis.location.href).href,
+  );
+  // No-args on purpose: the glue resolves the .wasm next to the natively-imported .mjs with real
+  // import.meta semantics (verified live); passing wasmBinary from bundle context breaks _malloc
+  // (Metro/Hermes-transpiled TypedArray does not survive the emscripten boundary).
   const module = await SQLiteESMFactory();
   const sqlite3 = SQLite.Factory(module);
   const vfs = new IDBBatchAtomicVFS("tabkeep-vfs");

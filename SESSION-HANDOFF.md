@@ -3,6 +3,34 @@
 **Branch:** `main` (local) → pushed to `nizhal-engine/main` and origin's `fix/sync-engine-data-loss`, both at `de73a1b`. Tree clean.
 **Repo:** `/Users/mithushancj/Documents/personal/echo` (pnpm + turbo monorepo).
 
+## Update (2026-07-02, evening) — multi-device/multi-tab verified; ONE open web-boot issue
+
+**Multi-device (B2 POS, web+headless):** three devices (browser, second tab, Node till) against
+the plain REST backend — 7 orders / 7 distinct ids, zero dup/loss, stock exact. Found+fixed the
+Arc-B follower-reactivity gap live: `openNizhalStore({ crossTabChannel })` (BroadcastChannel poke).
+
+**Mobile (tabkeep, iOS sim):** shipped `opSqliteDrizzle` in `@nizhal/local/op-sqlite` — drizzle's
+own op-sqlite driver targets the pre-v11 API (calls `executeAsync`/`executeRawAsync`, reads
+`rows._array`); found live on-device, shimmed with the v17 shapes. Also `safeRandomUUID`
+everywhere in the drizzle plane (Hermes). PROVEN live: mobile boots on op-sqlite, shows the
+web-created row (cross-device ←), adds "Ravi Mobile" → row lands in local Postgres (→), instant
+optimistic render.
+
+**OPEN ISSUE — tabkeep WEB boot fails in the current dev environment** (was verified end-to-end
+this morning, commit 8dbffc1): `TypeError: Cannot convert object to primitive value` at
+`wa-sqlite-async.mjs` `_malloc` (asyncify export-instrumentation wrapper), thrown from
+`SQLite.Factory` in bundle context only. Ruled out: served assets byte-identical to disk+morning;
+code path identical to verified (no-args factory); fresh Chrome profile; single Metro; `expo
+start -c` full rebundle; no service workers. Console-context factory runs "fine" but note: the
+wrapper only detonates on the FIRST wasm export call (`_malloc`), which console probes never made
+— so console "success" was not a valid control. Suspected mechanism (recorded for next session):
+the glue's instrumentation wrapper is an arrow function referencing `arguments` (dist line ~1204)
+— forwards the ENCLOSING scope's args to `_malloc`; investigate what toggles the instrumentation
+(asyncify assertions) between morning and now, and whether the sim app's Hermes debugger being
+attached to the same Metro flips dev flags. Repro: single Metro 8081, open web, boot fails at
+Factory. Workaround candidates: bundle the glue via Vite-style path (local-notes pattern works),
+or expo-sqlite web driver (COOP/COEP tax).
+
 ## Update (2026-07-02, latest) — Arc E: ONE standard — legacy plane DELETED
 
 Per explicit direction ("less is more; ship one nomenclature"): the TanStack blob plane is gone

@@ -11,7 +11,10 @@ declare module "wa-sqlite" {
 }
 
 declare module "wa-sqlite/dist/wa-sqlite-async.mjs" {
-  const factory: (opts?: { wasmBinary?: Uint8Array }) => Promise<unknown>;
+  const factory: (opts?: {
+    wasmBinary?: Uint8Array;
+    locateFile?: (f: string) => string;
+  }) => Promise<unknown>;
   export default factory;
 }
 

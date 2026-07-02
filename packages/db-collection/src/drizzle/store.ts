@@ -14,6 +14,7 @@ import { getTableColumns, getTableName, sql } from "drizzle-orm";
 import { Table, is } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { NizhalClient } from "../client.js";
+import { safeRandomUUID } from "../client.js";
 import type { DeadLetterStorage } from "../dead-letter.js";
 import { manualOnlineDetector } from "../manual-online-detector.js";
 import type { MutationIdStorage } from "../mutation-id.js";
@@ -262,7 +263,7 @@ export async function openNizhalStore<
   ][]) {
     mutate[name as keyof M] = ((args: unknown) => {
       const parsedArgs = def.schema.parse(args);
-      const idempotencyKey = crypto.randomUUID();
+      const idempotencyKey = safeRandomUUID();
       const dependsOn = def.dependsOn?.(parsedArgs);
       const touched = new Set<string>();
       const commit = gate

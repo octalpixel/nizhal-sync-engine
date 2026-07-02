@@ -3,6 +3,7 @@ import { and, eq, getTableColumns, getTableName, sql } from "drizzle-orm";
 import type { SQLWrapper } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Table } from "drizzle-orm/table";
+import { safeRandomUUID } from "../client.js";
 import type { AnyDrizzleSqliteDb, DerivedTableMap } from "./types.js";
 
 // The client-side MutatorTx over REAL derived sqlite tables. Mutator functions are written
@@ -119,7 +120,7 @@ export function createDrizzleClientMutatorCtx(
     userId: actor.userId,
     locationId: typeof actor.locationId === "string" ? actor.locationId : undefined,
     now: () => Date.now(),
-    newId: () => crypto.randomUUID(),
+    newId: () => safeRandomUUID(),
     jobs: noopJobs(),
     // Provisional client-side guess (local max + 1) for the optimistic UI; the server assigns the
     // authoritative value under a lock and the row rebases to it on the next pull.

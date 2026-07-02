@@ -22,6 +22,19 @@ import {
 } from "./src/domain";
 import { openTabkeepDatabase } from "./src/persistence";
 
+// Dev: surface unhandled rejection STACKS (LogBox swallows them into "TypeError: u…").
+(
+  globalThis as { HermesInternal?: { enablePromiseRejectionTracker?: (o: unknown) => void } }
+).HermesInternal?.enablePromiseRejectionTracker?.({
+  allRejections: true,
+  onUnhandled: (_id: number, error: unknown) => {
+    console.error(
+      "[unhandled-rejection]",
+      error instanceof Error ? (error.stack ?? error.message) : String(error),
+    );
+  },
+});
+
 interface CachedSession {
   shopId: string;
   userId: string;

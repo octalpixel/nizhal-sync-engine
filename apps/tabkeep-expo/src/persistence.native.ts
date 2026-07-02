@@ -1,8 +1,7 @@
 import type { NizhalKvStore } from "@nizhal/db-collection";
 import type { TableChangeSource } from "@nizhal/local";
-import { opSqliteChanges } from "@nizhal/local/op-sqlite";
+import { opSqliteChanges, opSqliteDrizzle } from "@nizhal/local/op-sqlite";
 import { open } from "@op-engineering/op-sqlite";
-import { drizzle } from "drizzle-orm/op-sqlite";
 
 export interface TabkeepDatabase {
   database: any;
@@ -32,5 +31,5 @@ export async function openTabkeepDatabase(): Promise<TabkeepDatabase | undefined
       ]);
     },
   };
-  return { database: drizzle(raw), changes: opSqliteChanges(raw), kv };
+  return { database: opSqliteDrizzle(raw), changes: opSqliteChanges(raw), kv };
 }
