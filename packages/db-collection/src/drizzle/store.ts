@@ -10,7 +10,7 @@ import {
 } from "@nizhal/kernel";
 import { createTableWatcher, deriveQueryTables } from "@nizhal/local";
 import type { LiveResult, TableChangeSource, WatchOptions } from "@nizhal/local";
-import { getTableColumns, getTableName, sql } from "drizzle-orm";
+import { asc, getTableColumns, getTableName, sql } from "drizzle-orm";
 import { Table, is } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { NizhalClient } from "../client.js";
@@ -22,10 +22,10 @@ import type { OnlineDetector } from "../types.js";
 import type { NizhalMutatorDefinition, NizhalPoisonEntry } from "../types.js";
 import { type WriteGate, createWriteGate } from "./atomic.js";
 import { CONTROL_TABLE_DDL, nizhalMeta, nizhalOutbox } from "./control-schema.js";
-import { createDeadLetterStore, createMetaStore } from "./meta.js";
+import { type NizhalMetaStore, createDeadLetterStore, createMetaStore } from "./meta.js";
 import { createDrizzleClientMutatorCtx } from "./mutator-tx.js";
 import { type PullLoop, createPullLoop } from "./pull.js";
-import { type PushEngine, createPushEngine } from "./push.js";
+import { type OutboxEnvelope, type PushEngine, createPushEngine } from "./push.js";
 import type { AnyDrizzleSqliteDb, DerivedTableMap } from "./types.js";
 
 type AnyMutators = Record<string, NizhalMutatorDefinition<any>>;
@@ -94,21 +94,113 @@ const SQLITE_TYPE_BY_COLUMN: Record<string, string> = {
   SQLiteBlobBuffer: "blob",
 };
 
+function sqliteColumnType(column: SQLiteColumn, tableName: string): string {
+  const sqlType = SQLITE_TYPE_BY_COLUMN[column.columnType];
+  if (!sqlType) {
+    throw new Error(
+      `[@nizhal/db-collection] no SQLite DDL mapping for column type '${column.columnType}' on '${tableName}.${column.name}'`,
+    );
+  }
+  return sqlType;
+}
+
 function tableDdl(table: SQLiteTable): string {
   const name = getTableName(table);
   const columns = Object.values(getTableColumns(table) as Record<string, SQLiteColumn>).map(
     (column) => {
-      const sqlType = SQLITE_TYPE_BY_COLUMN[column.columnType];
-      if (!sqlType) {
-        throw new Error(
-          `[@nizhal/db-collection] no SQLite DDL mapping for column type '${column.columnType}' on '${name}.${column.name}'`,
-        );
-      }
+      const sqlType = sqliteColumnType(column, name);
       const constraints = column.primary ? " PRIMARY KEY" : column.notNull ? " NOT NULL" : "";
       return `"${column.name}" ${sqlType}${constraints}`;
     },
   );
   return `CREATE TABLE IF NOT EXISTS "${name}" (${columns.join(", ")})`;
+}
+
+// On-device derived-schema migration (rfc-production-readiness T17). A fingerprint of the derived
+// tables is stored in nizhal_meta; on app update the current shape is diffed against it. Additive
+// changes (new columns) migrate in place via ALTER TABLE ADD COLUMN. A breaking change (a dropped or
+// retyped column, or a changed primary key) can't be expressed as an in-place ALTER in SQLite, so the
+// derived tables are dropped + recreated and the sync cursors cleared — the next pull re-hydrates from
+// scratch (the T8/T9 reset path). The outbox and dead-letter tables are untouched, so pending
+// optimistic writes replay after the re-hydration.
+const DERIVED_SCHEMA_KEY = "derived_schema";
+interface DerivedColumnShape {
+  type: string;
+  notNull: boolean;
+  primary: boolean;
+}
+type DerivedFingerprint = Record<string, Record<string, DerivedColumnShape>>;
+
+function derivedFingerprint(tables: SQLiteTable[]): DerivedFingerprint {
+  const fingerprint: DerivedFingerprint = {};
+  for (const table of tables) {
+    const name = getTableName(table);
+    const columns: Record<string, DerivedColumnShape> = {};
+    for (const column of Object.values(getTableColumns(table) as Record<string, SQLiteColumn>)) {
+      columns[column.name] = {
+        type: sqliteColumnType(column, name),
+        notNull: column.notNull,
+        primary: column.primary,
+      };
+    }
+    fingerprint[name] = columns;
+  }
+  return fingerprint;
+}
+
+function planDerivedMigration(
+  prev: DerivedFingerprint,
+  next: DerivedFingerprint,
+): { additive: Array<{ table: string; column: string; type: string }>; breaking: boolean } {
+  const additive: Array<{ table: string; column: string; type: string }> = [];
+  let breaking = false;
+  for (const [table, nextColumns] of Object.entries(next)) {
+    const prevColumns = prev[table];
+    if (!prevColumns) continue; // new table — CREATE TABLE IF NOT EXISTS already handled it
+    for (const [column, shape] of Object.entries(nextColumns)) {
+      const prevShape = prevColumns[column];
+      if (!prevShape) additive.push({ table, column, type: shape.type });
+      else if (prevShape.type !== shape.type || prevShape.primary !== shape.primary)
+        breaking = true;
+    }
+    for (const column of Object.keys(prevColumns)) {
+      if (!nextColumns[column]) breaking = true; // dropped column
+    }
+  }
+  return { additive, breaking };
+}
+
+async function migrateDerivedSchema(
+  db: AnyDrizzleSqliteDb,
+  tables: SQLiteTable[],
+  meta: NizhalMetaStore,
+): Promise<{ reset: boolean }> {
+  const next = derivedFingerprint(tables);
+  const prevRaw = await meta.get(DERIVED_SCHEMA_KEY);
+  if (!prevRaw) {
+    await meta.set(DERIVED_SCHEMA_KEY, JSON.stringify(next));
+    return { reset: false };
+  }
+  const prev = JSON.parse(prevRaw) as DerivedFingerprint;
+  const plan = planDerivedMigration(prev, next);
+  if (plan.breaking) {
+    for (const table of tables) {
+      await db.run(sql.raw(`DROP TABLE IF EXISTS "${getTableName(table)}"`));
+      await db.run(sql.raw(tableDdl(table)));
+    }
+    // Clear cursors so the next pull re-bootstraps from 0 (epoch stays — the SERVER data is unchanged).
+    await db.delete(nizhalMeta).where(sql`${nizhalMeta.key} like 'cursor:%'`);
+    await meta.set(DERIVED_SCHEMA_KEY, JSON.stringify(next));
+    return { reset: true };
+  }
+  // Additive columns are added NULLABLE — an existing row can't satisfy a NOT NULL without a default,
+  // and the value backfills as the row next syncs. (The server-side T16 guard forbids shipping a
+  // NOT-NULL-without-default synced column in the first place.)
+  for (const { table, column, type } of plan.additive) {
+    await db.run(sql.raw(`ALTER TABLE "${table}" ADD COLUMN "${column}" ${type}`));
+  }
+  await meta.set(DERIVED_SCHEMA_KEY, JSON.stringify(next));
+  return { reset: false };
 }
 
 /**
@@ -178,6 +270,20 @@ export async function openNizhalStore<
 
   const gate = createWriteGate();
   const meta = createMetaStore(db);
+  // On-device schema migration (T17): reconcile the derived tables with the last-seen shape before the
+  // pull loop starts — additive columns in place, a breaking change via drop-recreate + cursor reset.
+  const migration = await migrateDerivedSchema(db, Object.values(byName) as SQLiteTable[], meta);
+  if (migration.reset) {
+    // A breaking migration wiped the tables — re-establish optimistic rows from the durable outbox so
+    // a pending write stays visible even before (and without) the re-hydrating pull (D6).
+    const outboxRows = await db.select().from(nizhalOutbox).orderBy(asc(nizhalOutbox.ordinal));
+    for (const row of outboxRows) {
+      const envelope = row.envelope as OutboxEnvelope;
+      const def = opts.mutators[envelope.name];
+      if (!def) continue;
+      await def.fn(createDrizzleClientMutatorCtx(db, byName, opts.actor), envelope.args);
+    }
+  }
   const clientID = await meta.getOrCreateClientId();
   opts.echo.setDeviceId(clientID);
   const hlc = createHlcClock({ nodeId: normalizeHlcNodeId(clientID) });
