@@ -218,9 +218,17 @@ open-local-first → background refresh → first-launch retry.
 `createNizhalBlobs`, `memoryBlobStore` — client blob upload/download.
 `createNizhalStatus` — sync status over a source-agnostic engine view.
 
-> The legacy TanStack-collections plane (`nizhalCollectionOptions`, `createNizhalMutators`,
-> `waSqlitePersistence`/`opSqlitePersistence`, CRDT helpers) was removed in the unification —
-> git history has it. For purely local (no-sync) apps see [`@nizhal/local`](./local.md).
+### React Native — `@nizhal/db-collection/react-native`
+
+Two RN-only helpers, isolated behind a subpath so their native deps never load on web/Node:
+`installNitroFetch()` routes Nizhal's HTTP through `react-native-nitro-fetch`, and
+`reactNativeOnlineDetector()` is a NetInfo-backed `OnlineDetector` (wrap it in `manualOnlineDetector`
+and pass to `openNizhalStore({ onlineDetector })`). Requires the `react-native-nitro-fetch` and
+`@react-native-community/netinfo` peer deps.
+
+> The legacy TanStack-collections plane (its collection/mutator options and SQLite persistence
+> helpers) was removed in the unification — git history has it. For purely local (no-sync) apps
+> see [`@nizhal/local`](./local.md).
 
 ---
 
