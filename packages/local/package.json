@@ -53,5 +53,6 @@
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
     "wa-sqlite": "^1.0.0"
-  }
+  },
+  "license": "MIT"
 }

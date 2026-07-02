@@ -15,7 +15,6 @@
     "@expo/metro-runtime": "~56.0.15",
     "@nizhal/db-collection": "workspace:*",
     "@nizhal/kernel": "workspace:*",
-    "@nizhal/react-native": "workspace:*",
     "@op-engineering/op-sqlite": "17.0.0",
     "@react-native-community/netinfo": "^11.5.2",
     "drizzle-orm": "^0.45.2",
@@ -29,7 +28,6 @@
     "react-native-nitro-fetch": "^1.4.2",
     "react-native-nitro-modules": "^0.35.10",
     "react-native-nitro-text-decoder": "^0.2.0",
-    "react-native-nitro-websockets": "^1.0.3",
     "react-native-web": "^0.21.2",
     "@nizhal/local": "workspace:*",
     "wa-sqlite": "^1.0.0"

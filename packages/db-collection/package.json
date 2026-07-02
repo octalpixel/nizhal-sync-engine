@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./react-native": {
+      "types": "./dist/react-native.d.ts",
+      "default": "./dist/react-native.js"
     }
   },
   "scripts": {
@@ -21,18 +25,29 @@
   },
   "dependencies": {
     "@nizhal/kernel": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "@nizhal/local": "workspace:*"
+    "@nizhal/local": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
+  "peerDependencies": {
+    "@react-native-community/netinfo": ">=11.0.0",
+    "react-native-nitro-fetch": ">=1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@react-native-community/netinfo": { "optional": true },
+    "react-native-nitro-fetch": { "optional": true }
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.3",
     "@nizhal/kernel": "workspace:*",
     "@nizhal/server": "workspace:*",
+    "@react-native-community/netinfo": "^11.4.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/ws": "^8.18.1",
     "better-sqlite3": "^12.11.1",
+    "react-native-nitro-fetch": "^1.4.2",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
     "ws": "^8.21.0"
-  }
+  },
+  "license": "MIT"
 }

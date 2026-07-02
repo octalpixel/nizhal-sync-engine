@@ -102,7 +102,7 @@ export interface NizhalPoisonEntry {
   parkedAt: number;
 }
 
-/** Connectivity detector — Nizhal-owned (the previous @tanstack/offline-transactions shape). */
+/** Connectivity detector — Nizhal-owned; the outbox subscribes to it to auto-flush on reconnect. */
 export interface OnlineDetector {
   isOnline(): boolean;
   subscribe(callback: () => void): () => void;
