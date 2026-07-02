@@ -1,9 +1,9 @@
 import { PGlite } from "@electric-sql/pglite";
 import type { Actor, ContractSchemaSource, PullResult } from "@nizhal/kernel";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CREDIT_LEDGER_DDL, creditLedgerSchema } from "../../../apps/credit-ledger/src/schema.js";
-import { creditLedgerSyncRules } from "../../../apps/credit-ledger/src/sync-rules.js";
 import { postgresStorage } from "../src/adapters/storage.js";
+import { CREDIT_LEDGER_DDL, creditLedgerSchema } from "./fixtures/credit-ledger-schema.js";
+import { creditLedgerSyncRules } from "./fixtures/credit-ledger-sync-rules.js";
 
 const openDbs: PGlite[] = [];
 

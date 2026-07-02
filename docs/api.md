@@ -157,67 +157,69 @@ Hooks: `onPull`, `onPush`, `onConflict`, `onError`. `gatherStats(db, realtime)` 
 
 ## `@nizhal/db-collection`
 
-TanStack DB `SyncConfig` adapter, offline mutators, presence, persistence.
+The sync client — ONE standard: the drizzle-native store (`rfcs/rfc-drizzle-native-sync-client.md`).
+One SQLite file holds the derived real tables plus the `nizhal_outbox`/`nizhal_meta`/`nizhal_dead_letter`
+control tables; queries are the real Drizzle query builder; reactivity is table-granular `watch`.
+
+### `openNizhalStore`
+
+```ts
+import { openNizhalStore, createNizhalClient } from "@nizhal/db-collection";
+import { drizzle } from "drizzle-orm/op-sqlite"; // or expo-sqlite / waSqliteDrizzle / better-sqlite3
+
+const store = await openNizhalStore({
+  echo: createNizhalClient({ server, auth, bucketsForSyncRule }),
+  schema,        // the drizzle PG schema module — client sqlite tables are DERIVED (schema-once)
+  syncRules,
+  mutators,
+  actor,
+  database: drizzle(nativeDb),
+  changes,       // platform change feed (@nizhal/local: expoSqliteChanges / opSqliteChanges / waSqliteChanges)
+  onlineDetector,
+});
+
+store.db.select().from(store.tables.customers);   // real drizzle SQL over synced data
+store.mutate.addCustomer({ id, name });           // optimistic + durable outbox, one transaction
+store.watch(query, ({ data }) => …);              // live queries (works with @nizhal/local/react useLiveQuery)
+store.pullNow();                                  // pull-to-refresh
+```
+
+Also on the store: `ready()`, `waitForIdle()`, `getPendingCount()`, `deadLetter` +
+`retryDeadLetter()` + `onDeadLetterChange()`, `dispose()`.
 
 ### `createNizhalClient`
 
 ```ts
-import { createNizhalClient } from "@nizhal/db-collection";
-
 const echo = createNizhalClient({
   server: "http://localhost:4000",
   auth: { getHeaders: () => ({ Authorization: `Bearer ${token}` }), refresh },
   bucketsForSyncRule: (rule) => [...],
   subscribeSource,  // optional; defaults to PartySocket
   reconnect,        // jitter + catch-up on reconnect
-  ttl,              // evict out-of-scope bucket rows locally
-  pull,             // page size for bootstrap
+  pull,             // page size / interval
   presence,         // heartbeat interval
-  status,           // SyncStatus + outbox inspection
 });
 ```
 
 Methods: `pull`, `push`, `subscribe`, `track`/`untrack`, `presenceState`, `onPresence`, cursor/scope helpers.
 
-### `nizhalCollectionOptions`
-
-Returns a TanStack DB `CollectionConfig` wired to Nizhal pull/push:
-
-```ts
-import { nizhalCollectionOptions } from "@nizhal/db-collection";
-
-const notesConfig = nizhalCollectionOptions({
-  name: "notes",
-  syncRule: "myNotes",
-  echo,
-  persistence: waSqlitePersistence({ ... }),  // optional
-});
-```
-
-### `createNizhalMutators`
-
-Wraps kernel mutators with offline-durable optimistic writes (TanStack offline-transactions). Poison failures quarantine without wedging the outbox.
-
 ### Presence
 
 `track`, `untrack`, `presenceState`, `onPresence` — v2 metas-per-key with join/leave diffs.
 
-### Persistence
+### Session bootstrap
 
-| Export | Platform |
-|--------|----------|
-| `waSqlitePersistence` | Web (wa-sqlite + OPFS) |
-| `opSqlitePersistence` | React Native (op-sqlite) |
-| `migrateClientStore` | Client-store schema migrations |
-
-### CRDT helpers
-
-`createCrdtText`, `createCrdtMap`, `applyCrdtUpdate`, `encodeCrdtUpdate` — client-side Yjs editing before push.
+`startLocalFirstBootstrap`, `kvSessionStore`, `localStorageSessionStore` — cached-session
+open-local-first → background refresh → first-launch retry.
 
 ### Blob + status
 
 `createNizhalBlobs`, `memoryBlobStore` — client blob upload/download.
-`createNizhalStatus` — exposes sync status and poison-quarantine outbox entries.
+`createNizhalStatus` — sync status over a source-agnostic engine view.
+
+> The legacy TanStack-collections plane (`nizhalCollectionOptions`, `createNizhalMutators`,
+> `waSqlitePersistence`/`opSqlitePersistence`, CRDT helpers) was removed in the unification —
+> git history has it. For purely local (no-sync) apps see [`@nizhal/local`](./local.md).
 
 ---
 

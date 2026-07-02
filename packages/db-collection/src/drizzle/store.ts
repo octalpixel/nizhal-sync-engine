@@ -10,14 +10,14 @@ import {
 } from "@nizhal/kernel";
 import { createTableWatcher, deriveQueryTables } from "@nizhal/local";
 import type { LiveResult, TableChangeSource, WatchOptions } from "@nizhal/local";
-import type { OnlineDetector } from "@tanstack/offline-transactions";
 import { getTableColumns, getTableName, sql } from "drizzle-orm";
 import { Table, is } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { NizhalClient } from "../client.js";
+import type { DeadLetterStorage } from "../dead-letter.js";
 import { manualOnlineDetector } from "../manual-online-detector.js";
 import type { MutationIdStorage } from "../mutation-id.js";
-import type { DeadLetterStorage } from "../persistence/dead-letter-storage.js";
+import type { OnlineDetector } from "../types.js";
 import type { NizhalMutatorDefinition, NizhalPoisonEntry } from "../types.js";
 import { type WriteGate, createWriteGate } from "./atomic.js";
 import { CONTROL_TABLE_DDL, nizhalMeta, nizhalOutbox } from "./control-schema.js";

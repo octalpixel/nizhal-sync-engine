@@ -35,46 +35,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
 
-  apps/credit-ledger:
-    dependencies:
-      '@nizhal/db-collection':
-        specifier: workspace:*
-        version: link:../../packages/db-collection
-      '@nizhal/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
-      '@nizhal/server':
-        specifier: workspace:*
-        version: link:../../packages/server
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.3
-        version: 0.5.3
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.20.0
-      postgres:
-        specifier: ^3.4.5
-        version: 3.4.9
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-
   apps/docs:
     dependencies:
       '@astrojs/starlight':
@@ -94,226 +54,6 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  apps/emulation:
-    dependencies:
-      '@nizhal/db-collection':
-        specifier: workspace:*
-        version: link:../../packages/db-collection
-      '@nizhal/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
-      '@nizhal/server':
-        specifier: workspace:*
-        version: link:../../packages/server
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      credit-ledger:
-        specifier: workspace:*
-        version: link:../credit-ledger
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.3
-        version: 0.5.3
-      '@journeyapps/wa-sqlite':
-        specifier: ^1.7.0
-        version: 1.7.0
-      '@tanstack/browser-db-sqlite-persistence':
-        specifier: ^0.2.4
-        version: 0.2.4(@journeyapps/wa-sqlite@1.7.0)(typescript@5.9.3)
-      '@tanstack/offline-transactions':
-        specifier: ^1.0.37
-        version: 1.0.37(@react-native-community/netinfo@11.5.2(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(typescript@5.9.3)
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.20.0
-      postgres:
-        specifier: ^3.4.5
-        version: 3.4.9
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
-      wa-sqlite:
-        specifier: ^1.0.0
-        version: 1.0.0
-
-  apps/notes:
-    dependencies:
-      '@nizhal/db-collection':
-        specifier: workspace:*
-        version: link:../../packages/db-collection
-      '@nizhal/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
-      '@nizhal/server':
-        specifier: workspace:*
-        version: link:../../packages/server
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.3
-        version: 0.5.3
-      '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.27)
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.20.0
-      hono:
-        specifier: ^4.6.14
-        version: 4.12.27
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-
-  apps/op-sqlite-probe:
-    dependencies:
-      '@nizhal/db-collection':
-        specifier: workspace:*
-        version: link:../../packages/db-collection
-      '@nizhal/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
-      '@op-engineering/op-sqlite':
-        specifier: ^17.0.0
-        version: 17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      '@tanstack/db-sqlite-persistence-core':
-        specifier: ^0.2.4
-        version: 0.2.4(typescript@5.9.3)
-      '@tanstack/offline-transactions':
-        specifier: ^1.0.37
-        version: 1.0.37(@react-native-community/netinfo@11.5.2(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(typescript@5.9.3)
-      '@tanstack/react-native-db-sqlite-persistence':
-        specifier: ^0.2.4
-        version: 0.2.4(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(typescript@5.9.3)
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      expo:
-        specifier: ~56.0.12
-        version: 56.0.12(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(@expo/metro-runtime@56.0.15)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
-      expo-status-bar:
-        specifier: ~56.0.4
-        version: 56.0.4(expo@56.0.12)(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
-      isomorphic-webcrypto:
-        specifier: ^2.3.8
-        version: 2.3.8(expo@56.0.12)(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))
-      react:
-        specifier: 19.2.3
-        version: 19.2.3
-      react-native:
-        specifier: 0.85.3
-        version: 0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3)
-      react-native-get-random-values:
-        specifier: ^1.11.0
-        version: 1.11.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))
-      react-native-nitro-modules:
-        specifier: ^0.35.10
-        version: 0.35.10(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
-    devDependencies:
-      '@types/react':
-        specifier: ~19.2.2
-        version: 19.2.17
-      typescript:
-        specifier: ~5.9.2
-        version: 5.9.3
-
-  apps/tabkeep:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.27)
-      '@nizhal/db-collection':
-        specifier: workspace:*
-        version: link:../../packages/db-collection
-      '@nizhal/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
-      '@nizhal/server':
-        specifier: workspace:*
-        version: link:../../packages/server
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      '@tanstack/react-db':
-        specifier: ^0.1.60
-        version: 0.1.90(react@19.2.3)(typescript@5.9.3)
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      hono:
-        specifier: ^4.12.27
-        version: 4.12.27
-      react:
-        specifier: 19.2.3
-        version: 19.2.3
-      react-dom:
-        specifier: 19.2.3
-        version: 19.2.3(react@19.2.3)
-      wa-sqlite:
-        specifier: ^1.0.0
-        version: 1.0.0
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.3
-        version: 0.5.3
-      '@nizhal/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.20.0
-      '@types/react':
-        specifier: ^18.3.18
-        version: 18.3.31
-      '@types/react-dom':
-        specifier: ^18.3.5
-        version: 18.3.7(@types/react@18.3.31)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.4
-        version: 4.7.0(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.5
-        version: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-
   apps/tabkeep-expo:
     dependencies:
       '@expo/metro-runtime':
@@ -325,6 +65,9 @@ importers:
       '@nizhal/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@nizhal/local':
+        specifier: workspace:*
+        version: link:../../packages/local
       '@nizhal/react-native':
         specifier: workspace:*
         version: link:../../packages/react-native
@@ -334,21 +77,6 @@ importers:
       '@react-native-community/netinfo':
         specifier: ^11.5.2
         version: 11.5.2(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      '@tanstack/db-sqlite-persistence-core':
-        specifier: ^0.2.4
-        version: 0.2.4(typescript@5.9.3)
-      '@tanstack/offline-transactions':
-        specifier: ^1.0.37
-        version: 1.0.37(@react-native-community/netinfo@11.5.2(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(typescript@5.9.3)
-      '@tanstack/react-db':
-        specifier: ^0.1.60
-        version: 0.1.90(react@19.2.3)(typescript@5.9.3)
-      '@tanstack/react-native-db-sqlite-persistence':
-        specifier: ^0.2.4
-        version: 0.2.4(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(typescript@5.9.3)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
@@ -426,37 +154,13 @@ importers:
       '@nizhal/local':
         specifier: workspace:*
         version: link:../local
-      '@op-engineering/op-sqlite':
-        specifier: ^17.0.0
-        version: 17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
-      '@tanstack/browser-db-sqlite-persistence':
-        specifier: ^0.2.4
-        version: 0.2.4(@journeyapps/wa-sqlite@1.7.0)(typescript@5.9.3)
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      '@tanstack/db-sqlite-persistence-core':
-        specifier: ^0.2.4
-        version: 0.2.4(typescript@5.9.3)
-      '@tanstack/offline-transactions':
-        specifier: ^1.0.37
-        version: 1.0.37(@react-native-community/netinfo@11.5.2(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(typescript@5.9.3)
-      '@tanstack/react-native-db-sqlite-persistence':
-        specifier: ^0.2.4
-        version: 0.2.4(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(typescript@5.9.3)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      yjs:
-        specifier: ^13.6.31
-        version: 13.6.31
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.3
         version: 0.5.3
-      '@journeyapps/wa-sqlite':
-        specifier: ^1.7.0
-        version: 1.7.0
       '@nizhal/server':
         specifier: workspace:*
         version: link:../server
@@ -475,9 +179,6 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-      wa-sqlite:
-        specifier: ^1.0.0
-        version: 1.0.0
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -621,76 +322,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
 
-  playground/chat-nizhal:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.27)
-      '@nizhal/db-collection':
-        specifier: workspace:*
-        version: link:../../packages/db-collection
-      '@nizhal/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
-      '@nizhal/server':
-        specifier: workspace:*
-        version: link:../../packages/server
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      '@tanstack/react-db':
-        specifier: ^0.1.60
-        version: 0.1.90(react@19.2.3)(typescript@5.9.3)
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      hono:
-        specifier: ^4.12.27
-        version: 4.12.27
-      react:
-        specifier: 19.2.3
-        version: 19.2.3
-      react-dom:
-        specifier: 19.2.3
-        version: 19.2.3(react@19.2.3)
-      wa-sqlite:
-        specifier: ^1.0.0
-        version: 1.0.0
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.3
-        version: 0.5.3
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.20.0
-      '@types/react':
-        specifier: ^18.3.18
-        version: 18.3.31
-      '@types/react-dom':
-        specifier: ^18.3.5
-        version: 18.3.7(@types/react@18.3.31)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.4
-        version: 4.7.0(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
-      esbuild:
-        specifier: ^0.25.12
-        version: 0.25.12
-      postgres:
-        specifier: ^3.4.5
-        version: 3.4.9
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.5
-        version: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-
   playground/local-notes:
     dependencies:
       '@nizhal/local':
@@ -715,49 +346,6 @@ importers:
       vite:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-
-  playground/pos/web-nizhal:
-    dependencies:
-      '@nizhal/db-collection':
-        specifier: workspace:*
-        version: link:../../../packages/db-collection
-      '@nizhal/kernel':
-        specifier: workspace:*
-        version: link:../../../packages/kernel
-      '@tanstack/db':
-        specifier: ^0.6.12
-        version: 0.6.12(typescript@5.9.3)
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
-      react:
-        specifier: 19.2.3
-        version: 19.2.3
-      react-dom:
-        specifier: 19.2.3
-        version: 19.2.3(react@19.2.3)
-      wa-sqlite:
-        specifier: ^1.0.0
-        version: 1.0.0
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@types/react':
-        specifier: ^18.3.18
-        version: 18.3.31
-      '@types/react-dom':
-        specifier: ^18.3.5
-        version: 18.3.7(@types/react@18.3.31)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.4
-        version: 4.7.0(vite@6.4.3(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.5
-        version: 6.4.3(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
 
 packages:
 
@@ -1091,18 +679,6 @@ packages:
 
   '@babel/plugin-transform-react-jsx-development@7.29.7':
     resolution: {integrity: sha512-Xfy3UVMF04+ypnFbkhvfqtmvwfe92qwQdbGZVonhE+6v35GzlofmOnA1szaZqzb9xYWr0nl1e5EMmzi0DNON1g==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-transform-react-jsx-self@7.29.7':
-    resolution: {integrity: sha512-TL0hMc9xzy86VD31nUiwzd5otRAcyEPcsegCxolO0PvcXuH1v0kECe/UIznYFihpkvU5wg/jk4v0TTEFfm53fw==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-transform-react-jsx-source@7.29.7':
-    resolution: {integrity: sha512-06IyK09H3wi4cGbhDBwp5gUGo0IKtnYa8tyTiephirPCK6fbobVGiXMMI5zLQ4aKEYP3wZ3ArU44o+8KMrSG/Q==}
     engines: {node: '>=6.9.0'}
     peerDependencies:
       '@babel/core': ^7.0.0-0
@@ -2274,9 +1850,6 @@ packages:
     resolution: {integrity: sha512-u3UPsIilWKOM3F9CXtrG8LEJmNxwoCQC/XVj4IKYXvvpx7QIi/Kg1LI5uDmDpKlac62NUtX7eLjRh+jVZcLOzw==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
-  '@journeyapps/wa-sqlite@1.7.0':
-    resolution: {integrity: sha512-xQZ670aKDo4FWxIFpLqY0AGDpURr09aYIO08UkLdWvFw8C018nCiqY0ILJudGRhRdXORhv7K2xD2OXZ2QxU39w==}
-
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
 
@@ -2511,9 +2084,6 @@ packages:
       '@types/react':
         optional: true
 
-  '@rolldown/pluginutils@1.0.0-beta.27':
-    resolution: {integrity: sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==}
-
   '@rollup/pluginutils@5.4.0':
     resolution: {integrity: sha512-MfPp06CjRLfXQ3wY0R8vJDYBy/MvVcc9OulEfR0B8Iv9ko+GCNaRZ+EpJYFl27LhKsZK0o420sYCRHCjfCgeUg==}
     engines: {node: '>=14.0.0'}
@@ -2698,19 +2268,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@tanstack/browser-db-sqlite-persistence@0.2.4':
-    resolution: {integrity: sha512-isLhw0J5i/MVOnzlZBcUr07GnXDF8TiUm5/GvD7vy4CIFfS3Cw36hgHT2dyqy8vR0yCFZbo1nW+WKPFGhuD7jw==}
-    peerDependencies:
-      '@journeyapps/wa-sqlite': ^1.4.1
-      typescript: '>=4.7'
-
   '@tanstack/db-ivm@0.1.18':
     resolution: {integrity: sha512-+pZJiRKdoKRM5Epq9T7otD9ZJl82pRFauo7LKuJGrarjVKQ7r+QQlPe3kGdN9LEKSnuNGIWjX9OOY4M8kH4eLw==}
-    peerDependencies:
-      typescript: '>=4.7'
-
-  '@tanstack/db-sqlite-persistence-core@0.2.4':
-    resolution: {integrity: sha512-wQ+nV2UMJKoKcObk4ZMNg0GyaT3tsuQ27qxEQY1wmK4FiuC6VGFD+Sq2H27f97JfznprcyYB9V/TVkVKEB7XNg==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -2733,17 +2292,6 @@ packages:
   '@tanstack/pacer-lite@0.2.2':
     resolution: {integrity: sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==}
     engines: {node: '>=18'}
-
-  '@tanstack/react-db@0.1.90':
-    resolution: {integrity: sha512-wOUbaiV0hzTVRRH2WvLU7EFScdn21+26GslHnw6vw1wWUW1NobgLovQ3Y74PntAEfbyCIK2gVLevFOM0dAH3zQ==}
-    peerDependencies:
-      react: 19.2.3
-
-  '@tanstack/react-native-db-sqlite-persistence@0.2.4':
-    resolution: {integrity: sha512-2KVvAkEx21I6rUymwJKE31rlFVsIjqMSLnWa4fFwgCR3smtTZLGZIzqkAoRryIiXC1RJPUcIecm9TZj2zxRuTQ==}
-    peerDependencies:
-      '@op-engineering/op-sqlite': ^15.2.5
-      typescript: '>=4.7'
 
   '@turbo/darwin-64@2.10.0':
     resolution: {integrity: sha512-EwvHThXzpY0KGd1/NAmuewI5D+aVa3Rl/OlxE36yfjUKb/+ySrfJrSlEFt8aD1OXwnnaHnQnPKHFndor0Zxlsg==}
@@ -2774,18 +2322,6 @@ packages:
     resolution: {integrity: sha512-dVHGaf9F8twzgibcBqKoADT/LLqf9++jDb+hq/LPWWaOmRpp4M+/pVOm7vy4z9D++xg8eaxWLT0+wQxFwhYu9A==}
     cpu: [arm64]
     os: [win32]
-
-  '@types/babel__core@7.20.5':
-    resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
-
-  '@types/babel__generator@7.27.0':
-    resolution: {integrity: sha512-ufFd2Xi92OAVPYsy+P4n7/U7e68fex0+Ee8gSG9KX7eo084CWiQ4sdxktvdl0bOPupXtVJPY19zk6EwWqUQ8lg==}
-
-  '@types/babel__template@7.4.4':
-    resolution: {integrity: sha512-h/NUaSyG5EyxBIp8YRxo4RMe2/qQgvyowRwVMzhYhBCONbW8PUsg4lkFMrhgZhUe5z3L3MiLDuvyJ/CaPa2A8A==}
-
-  '@types/babel__traverse@7.28.0':
-    resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
   '@types/better-sqlite3@7.6.13':
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
@@ -2847,17 +2383,6 @@ packages:
   '@types/node@24.13.2':
     resolution: {integrity: sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA==}
 
-  '@types/prop-types@15.7.15':
-    resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
-
-  '@types/react-dom@18.3.7':
-    resolution: {integrity: sha512-MEe3UeoENYVFXzoXEWsvcpg6ZvlrFNlOQ7EOsvhI3CfAXwzPfO8Qwuxd40nepsYKqyyVQnTdEfv68q91yLcKrQ==}
-    peerDependencies:
-      '@types/react': ^18.0.0
-
-  '@types/react@18.3.31':
-    resolution: {integrity: sha512-vfEqpXTvwT91yhmwdfouStN2hSKwTvyRs8qpLfADyrq/kxDw0hZM7Wk9Ug1FELj8hIby+S/+kQCSRFF32nv2Qw==}
-
   '@types/react@19.2.17':
     resolution: {integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==}
 
@@ -2889,12 +2414,6 @@ packages:
   '@unimodules/react-native-adapter@6.3.9':
     resolution: {integrity: sha512-i9/9Si4AQ8awls+YGAKkByFbeAsOPgUNeLoYeh2SQ3ddjxJ5ZJDtq/I74clDnpDcn8zS9pYlcDJ9fgVJa39Glw==}
     deprecated: 'replaced by the ''expo'' package, learn more: https://blog.expo.dev/whats-new-in-expo-modules-infrastructure-7a7cdda81ebc'
-
-  '@vitejs/plugin-react@4.7.0':
-    resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
-    engines: {node: ^14.18.0 || >=16.0.0}
-    peerDependencies:
-      vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
   '@vitest/expect@3.2.6':
     resolution: {integrity: sha512-1+7q9BtaKzEmO+fmNT3kYvoNn5Y71XWAx2Q5HRim4tTVRQVRv4uJFAQ5FbK0OPUeNP/WmVCpxYxoJdvuHVjzBQ==}
@@ -5213,10 +4732,6 @@ packages:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
     engines: {node: '>=0.10.0'}
 
-  react-refresh@0.17.0:
-    resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
-    engines: {node: '>=0.10.0'}
-
   react@19.2.3:
     resolution: {integrity: sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA==}
     engines: {node: '>=0.10.0'}
@@ -5874,11 +5389,6 @@ packages:
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
-
-  use-sync-external-store@1.6.0:
-    resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
-    peerDependencies:
-      react: 19.2.3
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
@@ -6691,16 +6201,6 @@ snapshots:
       '@babel/plugin-transform-react-jsx': 7.29.7(@babel/core@7.29.7)
     transitivePeerDependencies:
       - supports-color
-
-  '@babel/plugin-transform-react-jsx-self@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-transform-react-jsx-source@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-transform-react-jsx@7.29.7(@babel/core@7.29.7)':
     dependencies:
@@ -7818,8 +7318,6 @@ snapshots:
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
-  '@journeyapps/wa-sqlite@1.7.0': {}
-
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -7962,12 +7460,6 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
-  '@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3)':
-    dependencies:
-      react: 19.2.3
-      react-native: 0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3)
-    optional: true
-
   '@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)':
     dependencies:
       react: 19.2.3
@@ -8096,16 +7588,6 @@ snapshots:
 
   '@react-native/normalize-colors@0.85.3': {}
 
-  '@react-native/virtualized-lists@0.85.3(@types/react@18.3.31)(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3)':
-    dependencies:
-      invariant: 2.2.4
-      nullthrows: 1.1.1
-      react: 19.2.3
-      react-native: 0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3)
-    optionalDependencies:
-      '@types/react': 18.3.31
-    optional: true
-
   '@react-native/virtualized-lists@0.85.3(@types/react@19.2.17)(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)':
     dependencies:
       invariant: 2.2.4
@@ -8114,8 +7596,6 @@ snapshots:
       react-native: 0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3)
     optionalDependencies:
       '@types/react': 19.2.17
-
-  '@rolldown/pluginutils@1.0.0-beta.27': {}
 
   '@rollup/pluginutils@5.4.0(rollup@4.62.2)':
     dependencies:
@@ -8244,22 +7724,10 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@tanstack/browser-db-sqlite-persistence@0.2.4(@journeyapps/wa-sqlite@1.7.0)(typescript@5.9.3)':
-    dependencies:
-      '@journeyapps/wa-sqlite': 1.7.0
-      '@tanstack/db-sqlite-persistence-core': 0.2.4(typescript@5.9.3)
-      typescript: 5.9.3
-
   '@tanstack/db-ivm@0.1.18(typescript@5.9.3)':
     dependencies:
       fractional-indexing: 3.4.0
       sorted-btree: 1.8.1
-      typescript: 5.9.3
-
-  '@tanstack/db-sqlite-persistence-core@0.2.4(typescript@5.9.3)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.6.12(typescript@5.9.3)
       typescript: 5.9.3
 
   '@tanstack/db@0.6.12(typescript@5.9.3)':
@@ -8280,20 +7748,6 @@ snapshots:
 
   '@tanstack/pacer-lite@0.2.2': {}
 
-  '@tanstack/react-db@0.1.90(react@19.2.3)(typescript@5.9.3)':
-    dependencies:
-      '@tanstack/db': 0.6.12(typescript@5.9.3)
-      react: 19.2.3
-      use-sync-external-store: 1.6.0(react@19.2.3)
-    transitivePeerDependencies:
-      - typescript
-
-  '@tanstack/react-native-db-sqlite-persistence@0.2.4(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(typescript@5.9.3)':
-    dependencies:
-      '@op-engineering/op-sqlite': 17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
-      '@tanstack/db-sqlite-persistence-core': 0.2.4(typescript@5.9.3)
-      typescript: 5.9.3
-
   '@turbo/darwin-64@2.10.0':
     optional: true
 
@@ -8311,27 +7765,6 @@ snapshots:
 
   '@turbo/windows-arm64@2.10.0':
     optional: true
-
-  '@types/babel__core@7.20.5':
-    dependencies:
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
-      '@types/babel__generator': 7.27.0
-      '@types/babel__template': 7.4.4
-      '@types/babel__traverse': 7.28.0
-
-  '@types/babel__generator@7.27.0':
-    dependencies:
-      '@babel/types': 7.29.7
-
-  '@types/babel__template@7.4.4':
-    dependencies:
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
-
-  '@types/babel__traverse@7.28.0':
-    dependencies:
-      '@babel/types': 7.29.7
 
   '@types/better-sqlite3@7.6.13':
     dependencies:
@@ -8398,17 +7831,6 @@ snapshots:
     dependencies:
       undici-types: 7.18.2
 
-  '@types/prop-types@15.7.15': {}
-
-  '@types/react-dom@18.3.7(@types/react@18.3.31)':
-    dependencies:
-      '@types/react': 18.3.31
-
-  '@types/react@18.3.31':
-    dependencies:
-      '@types/prop-types': 15.7.15
-      csstype: 3.2.3
-
   '@types/react@19.2.17':
     dependencies:
       csstype: 3.2.3
@@ -8443,30 +7865,6 @@ snapshots:
       expo-modules-autolinking: 0.0.3
       invariant: 2.2.4
     optional: true
-
-  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-transform-react-jsx-source': 7.29.7(@babel/core@7.29.7)
-      '@rolldown/pluginutils': 1.0.0-beta.27
-      '@types/babel__core': 7.20.5
-      react-refresh: 0.17.0
-      vite: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-transform-react-jsx-source': 7.29.7(@babel/core@7.29.7)
-      '@rolldown/pluginutils': 1.0.0-beta.27
-      '@types/babel__core': 7.20.5
-      react-refresh: 0.17.0
-      vite: 6.4.3(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - supports-color
 
   '@vitest/expect@3.2.6':
     dependencies:
@@ -9164,16 +8562,6 @@ snapshots:
       '@esbuild-kit/esm-loader': 2.6.5
       esbuild: 0.25.12
       tsx: 4.22.4
-
-  drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9):
-    optionalDependencies:
-      '@cloudflare/workers-types': 4.20260625.1
-      '@electric-sql/pglite': 0.5.3
-      '@libsql/client': 0.17.4
-      '@op-engineering/op-sqlite': 17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3)
-      '@types/better-sqlite3': 7.6.13
-      better-sqlite3: 12.11.1
-      postgres: 3.4.9
 
   drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9):
     optionalDependencies:
@@ -11374,52 +10762,6 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3):
-    dependencies:
-      '@react-native/assets-registry': 0.85.3
-      '@react-native/codegen': 0.85.3(@babel/core@7.29.7)
-      '@react-native/community-cli-plugin': 0.85.3
-      '@react-native/gradle-plugin': 0.85.3
-      '@react-native/js-polyfills': 0.85.3
-      '@react-native/normalize-colors': 0.85.3
-      '@react-native/virtualized-lists': 0.85.3(@types/react@18.3.31)(react-native@0.85.3(@babel/core@7.29.7)(@types/react@18.3.31)(react@19.2.3))(react@19.2.3)
-      abort-controller: 3.0.0
-      anser: 1.4.10
-      ansi-regex: 5.0.1
-      babel-plugin-syntax-hermes-parser: 0.33.3
-      base64-js: 1.5.1
-      commander: 12.1.0
-      flow-enums-runtime: 0.0.6
-      hermes-compiler: 250829098.0.10
-      invariant: 2.2.4
-      memoize-one: 5.2.1
-      metro-runtime: 0.84.4
-      metro-source-map: 0.84.4
-      nullthrows: 1.1.1
-      pretty-format: 29.7.0
-      promise: 8.3.0
-      react: 19.2.3
-      react-devtools-core: 6.1.5
-      react-refresh: 0.14.2
-      regenerator-runtime: 0.13.11
-      scheduler: 0.27.0
-      semver: 7.8.5
-      stacktrace-parser: 0.1.11
-      tinyglobby: 0.2.17
-      whatwg-fetch: 3.6.20
-      ws: 7.5.11
-      yargs: 17.7.3
-    optionalDependencies:
-      '@types/react': 18.3.31
-    transitivePeerDependencies:
-      - '@babel/core'
-      - '@react-native-community/cli'
-      - '@react-native/metro-config'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-    optional: true
-
   react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3):
     dependencies:
       '@react-native/assets-registry': 0.85.3
@@ -11466,8 +10808,6 @@ snapshots:
       - utf-8-validate
 
   react-refresh@0.14.2: {}
-
-  react-refresh@0.17.0: {}
 
   react@19.2.3: {}
 
@@ -12222,10 +11562,6 @@ snapshots:
       browserslist: 4.28.4
       escalade: 3.2.0
       picocolors: 1.1.1
-
-  use-sync-external-store@1.6.0(react@19.2.3):
-    dependencies:
-      react: 19.2.3
 
   util-deprecate@1.0.2: {}
 

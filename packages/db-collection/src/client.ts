@@ -1,6 +1,4 @@
 import { type Cursor, INITIAL_CURSOR, type Mutation, type PullResult } from "@nizhal/kernel";
-import type { OfflineTransaction } from "@tanstack/offline-transactions";
-import { LocalWriteBarrier, type LocalWriteRow } from "./local-write-barrier.js";
 import { mergeBucketPresence, syncPresenceDiff, syncPresenceState } from "./presence-sync.js";
 import { type NizhalStatus, type NizhalStatusController, createNizhalStatus } from "./status.js";
 import {
@@ -9,6 +7,7 @@ import {
   createNizhalAuthState,
   httpSyncTargetWithAuthState,
 } from "./sync-target.js";
+import type { OutboxTransactionLike } from "./types.js";
 import type {
   NizhalClientConfig,
   NizhalMode,
@@ -56,12 +55,6 @@ export interface NizhalClient extends NizhalStatus {
   registerCollection?(collectionId: string, syncRule: string, mode: NizhalMode): void;
   isCollectionLocalFirst?(collectionId: string): boolean;
   registerPuller?(collectionId: string, syncRule: string, pull: () => Promise<boolean>): () => void;
-  setLocalWriteBootstrap?(bootstrap: Promise<ReadonlyArray<OfflineTransaction>>): void;
-  waitForLocalWritesReady?(): Promise<void>;
-  registerLocalWrite?(transactionId: string, rows: ReadonlyArray<LocalWriteRow>): void;
-  isLocalWriteBlocked?(collectionId: string, key: string): boolean;
-  getPendingLocalFields?(collectionId: string, key: string): ReadonlySet<string>;
-  acknowledgeLocalWrite?(transactionId: string): Promise<void>;
 }
 
 export interface NizhalPushResult {
@@ -92,7 +85,6 @@ export function createNizhalClient(config: NizhalClientConfig): NizhalClient {
   const trackedRules = new Map<string, Record<string, unknown>>();
   const collectionModes = new Map<string, NizhalMode>();
   const pullers = new Map<string, { syncRule: string; pull: () => Promise<boolean> }>();
-  const localWriteBarrier = new LocalWriteBarrier();
   let streamUnsub: (() => void) | null = null;
   let currentSource: NizhalSubscribeSource | null = null;
   let reconnectNotifyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -483,53 +475,6 @@ export function createNizhalClient(config: NizhalClientConfig): NizhalClient {
       return () => {
         if (pullers.get(collectionId) === entry) pullers.delete(collectionId);
       };
-    },
-
-    setLocalWriteBootstrap(bootstrap) {
-      localWriteBarrier.setBootstrap(bootstrap);
-    },
-
-    waitForLocalWritesReady() {
-      return localWriteBarrier.ready();
-    },
-
-    registerLocalWrite(transactionId, rows) {
-      const localFirstRows = rows.filter(
-        (row) => collectionModes.get(row.collectionId) !== "server-authoritative",
-      );
-      localWriteBarrier.register(transactionId, localFirstRows);
-    },
-
-    isLocalWriteBlocked(collectionId, key) {
-      return localWriteBarrier.isBlocked(collectionId, key);
-    },
-
-    getPendingLocalFields(collectionId, key) {
-      return localWriteBarrier.pendingFields(collectionId, key);
-    },
-
-    async acknowledgeLocalWrite(transactionId) {
-      await localWriteBarrier.ready();
-      const rows = localWriteBarrier.beginAcknowledgement(transactionId);
-      if (rows.length === 0) return;
-      try {
-        const collectionIds = [...new Set(rows.map((row) => row.collectionId))];
-        for (const collectionId of collectionIds) {
-          const puller = pullers.get(collectionId);
-          if (!puller) {
-            throw new Error(
-              `acknowledgement pull unavailable for collection '${collectionId}'; preload it before mutating`,
-            );
-          }
-          if (!(await puller.pull())) {
-            throw new Error(`acknowledgement pull failed for collection '${collectionId}'`);
-          }
-        }
-        localWriteBarrier.completeAcknowledgement(transactionId);
-      } catch (error) {
-        localWriteBarrier.failAcknowledgement(transactionId);
-        throw error;
-      }
     },
 
     syncStatus: status.syncStatus,

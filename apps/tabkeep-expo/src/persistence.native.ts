@@ -1,10 +1,37 @@
-import { type NizhalSQLitePersistence, opSqlitePersistence } from "@nizhal/db-collection";
+import type { NizhalKvStore } from "@nizhal/db-collection";
+import type { TableChangeSource } from "@nizhal/local";
+import { opSqliteChanges } from "@nizhal/local/op-sqlite";
 import { open } from "@op-engineering/op-sqlite";
+import { drizzle } from "drizzle-orm/op-sqlite";
 
-// Native (iOS + Android): durable on-device store via op-sqlite. Default location resolves to the
-// app's per-platform documents directory. Same Nizhal client/outbox as web — only the local store
-// differs. This is the offline-first guarantee: writes persist on the device and survive restarts.
-export async function openTabkeepPersistence(): Promise<NizhalSQLitePersistence | undefined> {
-  const database = open({ name: "tabkeep.db" });
-  return opSqlitePersistence({ database });
+export interface TabkeepDatabase {
+  // biome-ignore lint/suspicious/noExplicitAny: driver-generic drizzle db handle.
+  database: any;
+  changes: TableChangeSource;
+  /** Durable KV for the cached session (rides the same SQLite file as the store). */
+  kv: NizhalKvStore;
+}
+
+// Native (iOS + Android): ONE durable SQLite file via op-sqlite — the derived drizzle tables,
+// the nizhal outbox/meta, and the session KV all live in it. Writes persist on the device and
+// survive restarts; that is the offline-first guarantee.
+export async function openTabkeepDatabase(): Promise<TabkeepDatabase | undefined> {
+  const raw = open({ name: "tabkeep.db" });
+  await raw.execute(
+    "CREATE TABLE IF NOT EXISTS tabkeep_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+  );
+  const kv: NizhalKvStore = {
+    async get(key) {
+      const result = await raw.execute("SELECT value FROM tabkeep_kv WHERE key = ?", [key]);
+      const rows = (result as { rows?: Array<{ value?: string }> }).rows;
+      return rows?.[0]?.value ?? null;
+    },
+    async set(key, value) {
+      await raw.execute("INSERT OR REPLACE INTO tabkeep_kv (key, value) VALUES (?, ?)", [
+        key,
+        value,
+      ]);
+    },
+  };
+  return { database: drizzle(raw), changes: opSqliteChanges(raw), kv };
 }

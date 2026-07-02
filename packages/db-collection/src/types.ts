@@ -1,5 +1,4 @@
 import type { Mutation, MutatorDef } from "@nizhal/kernel";
-import type { Collection } from "@tanstack/db";
 import type { NizhalStatusController } from "./status.js";
 import type { NizhalSyncTarget } from "./sync-target.js";
 
@@ -103,4 +102,27 @@ export interface NizhalPoisonEntry {
   parkedAt: number;
 }
 
-export type NizhalCollectionMap = Record<string, Collection<object, string>>;
+/** Connectivity detector — Nizhal-owned (the previous @tanstack/offline-transactions shape). */
+export interface OnlineDetector {
+  isOnline(): boolean;
+  subscribe(callback: () => void): () => void;
+  notifyOnline(): void;
+  dispose(): void;
+}
+
+/** A durable outbox entry surfaced to status/bootstrap consumers (legacy executor shape kept). */
+export interface OutboxTransactionLike {
+  id: string;
+  idempotencyKey?: string;
+  mutationFnName?: string;
+  metadata?: Record<string, unknown>;
+  mutations?: unknown[];
+}
+
+/** Thrown by sync targets to mark a push as terminally non-retriable. */
+export class NonRetriableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NonRetriableError";
+  }
+}

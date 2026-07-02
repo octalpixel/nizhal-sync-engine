@@ -1,4 +1,4 @@
-import type { OnlineDetector } from "@tanstack/offline-transactions";
+import type { OnlineDetector } from "./types.js";
 
 export interface ManualOnlineDetector extends OnlineDetector {
   /**

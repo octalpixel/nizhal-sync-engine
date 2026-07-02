@@ -1,5 +1,5 @@
-import { NonRetriableError } from "@tanstack/offline-transactions";
 import { describe, expect, it } from "vitest";
+import { NonRetriableError } from "../src/index.js";
 import { classifyPushError } from "../src/push-errors.js";
 import { NizhalSyncTargetError } from "../src/sync-target.js";
 

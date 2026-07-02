@@ -1,9 +1,5 @@
-import {
-  kvSessionStore,
-  localStorageSessionStore,
-  startLocalFirstBootstrap,
-} from "@nizhal/db-collection";
-import { useLiveQuery } from "@tanstack/react-db";
+import { kvSessionStore, startLocalFirstBootstrap } from "@nizhal/db-collection";
+import { useLiveQuery } from "@nizhal/local/react";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import {
@@ -17,7 +13,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ChatScreen } from "./src/chat/ChatScreen";
 import { createTabkeepExpoClient } from "./src/client";
 import {
   type CustomerRow,
@@ -25,7 +20,7 @@ import {
   foldLedgerBalance,
   formatMinorUnits,
 } from "./src/domain";
-import { openTabkeepPersistence } from "./src/persistence";
+import { openTabkeepDatabase } from "./src/persistence";
 
 interface CachedSession {
   shopId: string;
@@ -33,9 +28,8 @@ interface CachedSession {
   token: string;
 }
 
-// EXPO_PUBLIC_APP=chat renders the Nizhal chat client (same hosted server); default is the ledger.
 export default function App() {
-  return process.env.EXPO_PUBLIC_APP === "chat" ? <ChatScreen /> : <LedgerApp />;
+  return <LedgerApp />;
 }
 
 const SERVER = process.env.EXPO_PUBLIC_NIZHAL_SERVER ?? "http://127.0.0.1:4521";
@@ -76,14 +70,16 @@ function LedgerApp() {
     let boot: { dispose(): void } | undefined;
 
     void (async () => {
-      // Native persistence carries a durable KV (_nizhal_meta), so the session cache rides the same
-      // store; web has no SQLite yet, so it falls back to localStorage. The rest of the local-first
-      // launch dance (cached-open → background refresh → first-launch retry) lives in the framework.
-      const persistence = await openTabkeepPersistence();
+      // One durable SQLite file carries the derived tables, the outbox, AND the session KV —
+      // the local-first launch dance (cached-open → background refresh → first-launch retry)
+      // lives in the framework. Web has no database wired yet (native-first; see persistence.ts).
+      const tabkeepDb = await openTabkeepDatabase();
       if (disposed) return;
-      const sessionStore = persistence
-        ? kvSessionStore<CachedSession>(persistence.metaStorage, "tabkeep.session")
-        : localStorageSessionStore<CachedSession>("tabkeep.session");
+      if (!tabkeepDb) {
+        setNeedsConnection(true);
+        return;
+      }
+      const sessionStore = kvSessionStore<CachedSession>(tabkeepDb.kv, "tabkeep.session");
       boot = startLocalFirstBootstrap<CachedSession, Client>({
         sessionStore,
         fetchSession,
@@ -96,7 +92,8 @@ function LedgerApp() {
             token: session.token,
             // Each 401 refresh re-caches the session, so the next offline boot has a fresh token.
             refreshToken: async () => (await refreshSession()).token,
-            persistence,
+            database: tabkeepDb.database,
+            changes: tabkeepDb.changes,
           }),
         onOpen: setClient,
         onConnectionRequired: setNeedsConnection,
@@ -135,10 +132,17 @@ function LedgerApp() {
 }
 
 function Ledger({ client }: { client: Client }) {
-  const { data: customerData = [] } = useLiveQuery((q) => q.from({ customer: client.customers }));
-  const { data: entryData = [] } = useLiveQuery((q) => q.from({ entry: client.ledgerEntries }));
-  const customers = customerData as CustomerRow[];
-  const entries = entryData as LedgerEntryRow[];
+  // Real drizzle queries over the derived tables, live via the store's table watcher.
+  const { data: customerData } = useLiveQuery(
+    client.store,
+    client.store.db.select().from(client.store.tables.customers),
+  );
+  const { data: entryData } = useLiveQuery(
+    client.store,
+    client.store.db.select().from(client.store.tables.ledgerEntries),
+  );
+  const customers = (customerData ?? []) as CustomerRow[];
+  const entries = (entryData ?? []) as LedgerEntryRow[];
 
   const [name, setName] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);

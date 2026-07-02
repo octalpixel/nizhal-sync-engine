@@ -1,7 +1,7 @@
 import type { Cursor } from "@nizhal/kernel";
 import { eq } from "drizzle-orm";
+import type { DeadLetterStorage } from "../dead-letter.js";
 import type { MutationIdStorage } from "../mutation-id.js";
-import type { DeadLetterStorage } from "../persistence/dead-letter-storage.js";
 import type { NizhalPoisonEntry } from "../types.js";
 import { nizhalDeadLetter, nizhalMeta } from "./control-schema.js";
 import type { AnyDrizzleSqliteDb } from "./types.js";

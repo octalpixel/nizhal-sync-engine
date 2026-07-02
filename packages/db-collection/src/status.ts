@@ -1,5 +1,5 @@
 import { type Cursor, INITIAL_CURSOR } from "@nizhal/kernel";
-import type { OfflineExecutor, OfflineTransaction } from "@tanstack/offline-transactions";
+import type { OutboxTransactionLike } from "./types.js";
 import type { NizhalPoisonEntry } from "./types.js";
 
 export interface SyncStatus {
@@ -70,28 +70,32 @@ export function createNoopNizhalStatusController(): NizhalStatusController {
   };
 }
 
+/** Source-agnostic view onto whatever sync engine backs the store (the drizzle-native one). */
+export interface NizhalStatusSource {
+  isOnline(): boolean;
+  subscribeOnline(callback: () => void): () => void;
+  getPendingCount(): number | Promise<number>;
+  listOutbox(): Promise<OutboxEntry[]>;
+}
+
 export interface NizhalStatusDeps {
-  executor?: OfflineExecutor;
-  deadLetter?: NizhalPoisonEntry[];
+  source?: NizhalStatusSource;
+  deadLetter?: readonly NizhalPoisonEntry[];
 }
 
 export function createNizhalStatus(deps: NizhalStatusDeps): NizhalStatusController {
-  const executor = deps.executor;
+  const source = deps.source;
   const deadLetter = deps.deadLetter ?? [];
   let lastPullCursor = INITIAL_CURSOR;
   let lastPulledAt: number | null = null;
   let lastError: { phase: string; message: string } | null = null;
+  let pendingMutations = 0;
   const listeners = new Set<(status: SyncStatus) => void>();
-
-  function connectivity(): SyncStatus["connectivity"] {
-    if (!executor) return "online";
-    return executor.isOnline() ? "online" : "offline";
-  }
 
   function buildStatus(): SyncStatus {
     return {
-      connectivity: connectivity(),
-      pendingMutations: executor?.getPendingCount() ?? 0,
+      connectivity: !source || source.isOnline() ? "online" : "offline",
+      pendingMutations,
       lastPullCursor,
       lastPulledAt,
       lastError,
@@ -100,11 +104,17 @@ export function createNizhalStatus(deps: NizhalStatusDeps): NizhalStatusControll
   }
 
   function notify() {
-    const status = buildStatus();
-    for (const listener of listeners) listener(status);
+    const pending = source?.getPendingCount() ?? 0;
+    const settle = (count: number) => {
+      pendingMutations = count;
+      const status = buildStatus();
+      for (const listener of listeners) listener(status);
+    };
+    if (typeof pending === "number") settle(pending);
+    else void pending.then(settle);
   }
 
-  const unsubscribeOnline = executor?.getOnlineDetector().subscribe(notify);
+  const unsubscribeOnline = source?.subscribeOnline(notify);
 
   return {
     syncStatus: buildStatus,
@@ -118,8 +128,7 @@ export function createNizhalStatus(deps: NizhalStatusDeps): NizhalStatusControll
     },
     outbox: {
       async list() {
-        const transactions = await executor?.peekOutbox();
-        return (transactions ?? []).map(mapOutboxEntry);
+        return (await source?.listOutbox()) ?? [];
       },
       deadLetter() {
         return deadLetter.slice();
@@ -138,16 +147,5 @@ export function createNizhalStatus(deps: NizhalStatusDeps): NizhalStatusControll
       notify();
     },
     notify,
-  };
-}
-
-function mapOutboxEntry(tx: OfflineTransaction): OutboxEntry {
-  return {
-    id: tx.id,
-    mutationFnName: tx.mutationFnName,
-    idempotencyKey: tx.idempotencyKey,
-    retryCount: tx.retryCount,
-    lastError: tx.lastError ? { message: tx.lastError.message } : undefined,
-    createdAt: tx.createdAt,
   };
 }

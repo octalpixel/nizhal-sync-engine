@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "rootDir": ".",
-    "types": ["node"]
-  },
-  "include": ["src/domain.ts", "src/server.ts", "src/client.ts", "examples", "api"]
-}

@@ -3,6 +3,22 @@
 **Branch:** `main` (local) → pushed to `nizhal-engine/main` and origin's `fix/sync-engine-data-loss`, both at `de73a1b`. Tree clean.
 **Repo:** `/Users/mithushancj/Documents/personal/echo` (pnpm + turbo monorepo).
 
+## Update (2026-07-02, latest) — Arc E: ONE standard — legacy plane DELETED
+
+Per explicit direction ("less is more; ship one nomenclature"): the TanStack blob plane is gone
+from `@nizhal/db-collection` — `nizhalCollectionOptions`, `createNizhalMutators`,
+`openNizhalCollectionsStore`, `waSqlitePersistence`/`opSqlitePersistence`, CRDT helpers,
+client-group coordinator, and ALL `@tanstack/*` + `yjs` deps (client deps now: kernel + local +
+drizzle-orm). Legacy demo apps deleted (apps/tabkeep, notes, credit-ledger, emulation,
+op-sqlite-probe; playground/chat-nizhal†, linear-nizhal, pos) — git history keeps everything.
+† chat-nizhal source removal does NOT touch the live Vercel deployment or its Neon DB.
+**tabkeep-expo migrated for real**: one op-sqlite file (drizzle db + outbox + session KV),
+drizzle queries + cross-platform useLiveQuery; web is native-first pending wa-sqlite-under-Metro.
+`getchanges-bench` fixtures vendored into server tests. Gates: db-collection 47 ✓ (7 e2e vs real
+server + transport/protocol keepers) · server 74 ✓ · local 13 ✓ · kernel 12 ✓ · check-types ✓ ·
+lint 0. Follow-ups: pos rebuild on the new plane, wa-sqlite web driver wiring for tabkeep,
+Arc B coordinator on the one engine, chaos/emulation rig rebuild.
+
 ## Update (2026-07-02, later) — Arc D: the drizzle-native sync client SHIPPED (X→0)
 
 `rfcs/rfc-drizzle-native-sync-client.md` executed to zero: **`openNizhalStore` is now the

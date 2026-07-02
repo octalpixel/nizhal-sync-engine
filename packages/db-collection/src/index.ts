@@ -1,3 +1,15 @@
+// @nizhal/db-collection — the sync client. ONE standard: the drizzle-native store
+// (rfc-drizzle-native-sync-client). The legacy TanStack blob plane was removed after the
+// unification (git history: openNizhalCollectionsStore and friends).
+
+// ---- the store ---------------------------------------------------------------------------
+export { openNizhalStore } from "./drizzle/store.js";
+export type { NizhalStore, OpenNizhalStoreOptions } from "./drizzle/store.js";
+export { drizzleMutatorTx } from "./drizzle/mutator-tx.js";
+export { nizhalDeadLetter, nizhalMeta, nizhalOutbox } from "./drizzle/control-schema.js";
+export type { DeadLetterStorage } from "./dead-letter.js";
+
+// ---- transport / session ------------------------------------------------------------------
 export type { NizhalClient, NizhalPushResult } from "./client.js";
 export {
   createCloudflareSubscribeSource,
@@ -12,7 +24,7 @@ export type {
   WebSocketReconnectOptions,
   WebSocketSourceOptions,
 } from "./websocket-source.js";
-export { httpSyncTarget, NizhalSyncTargetError } from "./sync-target.js";
+export { NizhalSyncTargetError, httpSyncTarget } from "./sync-target.js";
 export type {
   NizhalPullRequest,
   NizhalPullResponse,
@@ -20,36 +32,6 @@ export type {
   NizhalPushResponse,
   NizhalSyncTarget,
 } from "./sync-target.js";
-export { nizhalCollectionOptions } from "./collection.js";
-export type { NizhalCollection, NizhalCollectionOptions } from "./collection.js";
-// Legacy blob-plane store (TanStack collections) — kept until the drizzle-native plane fully
-// supersedes it (rfc-drizzle-native-sync-client non-goals).
-export { openNizhalCollectionsStore } from "./store.js";
-export type {
-  NizhalCollectionsStore,
-  NizhalStoreCollections,
-  OpenNizhalCollectionsStoreOptions,
-} from "./store.js";
-// The drizzle-native sync client (rfc-drizzle-native-sync-client): real tables, one SQLite file.
-export { openNizhalStore } from "./drizzle/store.js";
-export type { NizhalStore, OpenNizhalStoreOptions } from "./drizzle/store.js";
-export { drizzleMutatorTx } from "./drizzle/mutator-tx.js";
-export { nizhalMeta, nizhalOutbox, nizhalDeadLetter } from "./drizzle/control-schema.js";
-export { openNizhalClientGroup } from "./client-group.js";
-export type {
-  NizhalClientGroup,
-  NizhalClientGroupDeadLetter,
-  NizhalCoordinator,
-  NizhalOnlineGate,
-  OpenNizhalClientGroupOptions,
-  SharedMutation,
-} from "./client-group.js";
-export {
-  browserCoordinator,
-  browserOnlineGate,
-  localStorageMeta,
-  localStorageOutbox,
-} from "./client-group-browser.js";
 export {
   kvSessionStore,
   localStorageSessionStore,
@@ -61,76 +43,37 @@ export type {
   NizhalKvStore,
   NizhalSessionStore,
 } from "./bootstrap.js";
+export { manualOnlineDetector } from "./manual-online-detector.js";
+export type { ManualOnlineDetector } from "./manual-online-detector.js";
+
+// ---- presence / blobs / status --------------------------------------------------------------
 export {
+  onPresence,
   presence,
+  presenceState,
   subscribePresence,
   track,
   untrack,
-  presenceState,
-  onPresence,
 } from "./presence.js";
-export { createNizhalMutators } from "./mutators.js";
-export { manualOnlineDetector } from "./manual-online-detector.js";
-export type { ManualOnlineDetector } from "./manual-online-detector.js";
-export type {
-  CreateNizhalMutatorsOptions,
-  NizhalMutatorsResult,
-} from "./mutators.js";
-export {
-  applyCrdtUpdate,
-  createCrdtMap,
-  createCrdtText,
-  crdtFieldBytes,
-  crdtMapContent,
-  crdtTextContent,
-  encodeCrdtUpdate,
-  getCrdtMap,
-  getCrdtText,
-} from "./crdt.js";
-export type { CrdtUpdateInput } from "./crdt.js";
-export {
-  createNizhalBlobs,
-  keyForBlob,
-  memoryBlobStore,
-} from "./blob.js";
+export { createNizhalBlobs, keyForBlob, memoryBlobStore } from "./blob.js";
 export type { BlobStore, NizhalBlobs } from "./blob.js";
 export { createNizhalStatus, createNoopNizhalStatus } from "./status.js";
 export type { NizhalStatus, NizhalStatusController, SyncStatus } from "./status.js";
-export { applyPullResult, buildNizhalSyncConfig } from "./sync.js";
-export type { NizhalSyncOptions } from "./sync.js";
-export { createMemoryStorage } from "./memory-storage.js";
-export {
-  NIZHAL_CLIENT_STORE_MIGRATIONS,
-  NIZHAL_CLIENT_STORE_VERSION,
-  NizhalClientStoreVersionError,
-  migrateClientStore,
-  mergeClientStoreMigrations,
-  createSerializedWaSqliteDatabase,
-  normalizeWaSqliteParams,
-  opSqlitePersistence,
-  toBindableWaSqliteValue,
-  waSqlitePersistence,
-} from "./persistence/index.js";
-export type {
-  ClientStoreMigration,
-  NizhalSQLitePersistence,
-  CreateSerializedWaSqliteDatabaseOptions,
-  OpSqliteDatabaseHandle,
-  OpSqlitePersistenceOptions,
-  WaSqliteCoreApi,
-  WaSqlitePersistenceOptions,
-} from "./persistence/index.js";
+
+// ---- shared types ---------------------------------------------------------------------------
+export { NonRetriableError } from "./types.js";
 export type {
   NizhalAuthConfig,
   NizhalClientConfig,
-  NizhalMutatorDefinition,
   NizhalMode,
+  NizhalMutatorDefinition,
   NizhalPoisonEntry,
-  NizhalPullConfig,
   NizhalPresenceConfig,
+  NizhalPullConfig,
   NizhalReconnectConfig,
   NizhalSubscribeSource,
   NizhalTtlConfig,
+  OnlineDetector,
   PresenceDiff,
   PresenceEvent,
   PresenceMember,

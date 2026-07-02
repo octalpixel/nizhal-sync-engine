@@ -1,7 +1,7 @@
 import type { Mutation } from "@nizhal/kernel";
-import type { OnlineDetector } from "@tanstack/offline-transactions";
 import { asc, eq } from "drizzle-orm";
 import type { NizhalClient } from "../client.js";
+import type { DeadLetterStorage } from "../dead-letter.js";
 import {
   type MutationIdStorage,
   allocateMutationId,
@@ -10,8 +10,8 @@ import {
   writeAllocatedMutationId,
   writePersistedMutationId,
 } from "../mutation-id.js";
-import type { DeadLetterStorage } from "../persistence/dead-letter-storage.js";
 import { classifyPushError } from "../push-errors.js";
+import type { OnlineDetector } from "../types.js";
 import type { NizhalMutatorDefinition, NizhalPoisonEntry } from "../types.js";
 import type { WriteGate } from "./atomic.js";
 import { nizhalOutbox } from "./control-schema.js";

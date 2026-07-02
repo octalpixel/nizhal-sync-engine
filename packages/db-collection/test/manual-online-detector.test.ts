@@ -1,6 +1,6 @@
-import type { OnlineDetector } from "@tanstack/offline-transactions";
 import { describe, expect, it, vi } from "vitest";
 import { manualOnlineDetector } from "../src/index.js";
+import type { OnlineDetector } from "../src/index.js";
 
 describe("manualOnlineDetector", () => {
   it("is online by default and forces offline / back online on demand", () => {

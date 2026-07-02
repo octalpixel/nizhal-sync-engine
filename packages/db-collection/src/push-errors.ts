@@ -1,5 +1,5 @@
-import { NonRetriableError } from "@tanstack/offline-transactions";
 import { NizhalSyncTargetError } from "./sync-target.js";
+import { NonRetriableError } from "./types.js";
 
 export type PushFailureClass = "retriable" | "terminal";
 
