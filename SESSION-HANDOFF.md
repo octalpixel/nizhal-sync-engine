@@ -1,7 +1,30 @@
 # Session handoff — Nizhal (echo) sync engine
 
-**Branch:** `main` (local) → pushed to `nizhal-engine/main` and origin's `fix/sync-engine-data-loss`, both at `de73a1b`. Tree clean.
+**Branch:** `fix/sync-engine-data-loss` (local) → pushed to origin's `fix/sync-engine-data-loss`
+and `nizhal-engine/main`. Tree clean at last push.
 **Repo:** `/Users/mithushancj/Documents/personal/echo` (pnpm + turbo monorepo).
+
+## ⭐ START HERE (2026-07-03) — Production-readiness RFC authored; next session EXECUTES it
+
+**The whole plan is `rfcs/rfc-production-readiness.md`** — X = 28 tasks in 7 phases (P1 truth
+pass + npm `0.1.0` → P2 resync/epoch/tombstone-GC keystone → P3 chaos rig → P4 schema evolution
+→ P5 load → P6 fleet polish → P7 pilot/rollout), targeting a 50k-user production release. Do not
+re-derive the gap analysis: the RFC's "Verified current state" section was checked empirically on
+2026-07-03 (grep/npm evidence inline). Six defaults await confirm-or-override in its Decisions
+table (D1 MIT · D2 fold `@nizhal/react-native` · D3 bless Vite-web, Metro unsupported ·
+D4 30-day tombstone retention · D5 publish `0.1.0` · D6 multi-tab caveat, Arc B optional).
+Harness task list mirrors the phases (tasks #23–#29). Start at P1/T1; P1+P2 strictly in order.
+
+Key non-obvious facts the RFC leans on (verified, save the re-discovery):
+- `cursorReset` already exists END-TO-END (server `storage.ts:618`, client `pull.ts:154` with
+  re-bootstrap + outbox replay) — P2 adds only the epoch + GC-horizon *triggers*.
+- Pull is already paginated/resumable (`hasMore` + per-page cursor); `listenNotifyRealtime` and
+  the `_nizhal_jobs` runner already exist — GC is a job registration, not new infra.
+- npm scope `@nizhal` was UNCLAIMED on 2026-07-03 (`npm view @nizhal/kernel` → 404); create the
+  org before `changeset publish`.
+- README/changeset still describe the deleted TanStack plane; no LICENSE; `@nizhal/react-native`
+  still imports `@tanstack/offline-transactions`; root `pnpm test` broken (deleted `emulation`
+  filter) — all P1 tasks.
 
 ## Update (2026-07-02, evening) — multi-device/multi-tab verified; ONE open web-boot issue
 
