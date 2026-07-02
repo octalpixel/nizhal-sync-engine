@@ -46,6 +46,10 @@ export interface OpenNizhalStoreOptions<
   changes?: TableChangeSource;
   onlineDetector?: OnlineDetector;
   derive?: DeriveSqliteSchemaOptions;
+  /** Cross-tab reactivity for a browser SQLite shared between tabs/windows: a BroadcastChannel
+   *  of this name re-runs the other tabs' watchers when this tab writes (update hooks are
+   *  per-connection, so without it a sibling tab's UI goes stale until its own next pull). */
+  crossTabChannel?: string;
   onPoison?: (entry: NizhalPoisonEntry) => void;
   /** Transient push retry backoff base (tests pass a short one). */
   retryBaseMs?: number;
@@ -184,6 +188,21 @@ export async function openNizhalStore<
   const watcher = createTableWatcher();
   const stopChanges = opts.changes?.subscribe((table) => watcher.notify(table));
 
+  // Cross-tab poke (multi-tab gap found live 2026-07-02: a sibling tab's pull-apply lands in the
+  // SHARED SQLite file, but this tab's update hook never fires — data present, UI stale).
+  let crossTab: BroadcastChannel | undefined;
+  const notifyTables = (tables: Iterable<string>) => {
+    const list = [...tables];
+    for (const table of list) watcher.notify(table);
+    crossTab?.postMessage(list);
+  };
+  if (opts.crossTabChannel && typeof BroadcastChannel !== "undefined") {
+    crossTab = new BroadcastChannel(`nizhal:${opts.crossTabChannel}`);
+    crossTab.onmessage = (event: MessageEvent<string[]>) => {
+      for (const table of event.data ?? []) watcher.notify(table);
+    };
+  }
+
   const engine: PushEngine = createPushEngine({
     db,
     gate,
@@ -211,9 +230,7 @@ export async function openNizhalStore<
       actor: opts.actor,
       bucketColumns,
       syncRules: syncRuleNames,
-      onTablesChanged: (tables) => {
-        for (const table of tables) watcher.notify(table);
-      },
+      onTablesChanged: (tables) => notifyTables(tables),
     });
     for (const rule of syncRuleNames) {
       pokeUnsubs.push(
@@ -264,7 +281,7 @@ export async function openNizhalStore<
           }
         })
         .then(() => {
-          for (const table of touched) watcher.notify(table);
+          notifyTables(touched);
           if (remoteEnabled) engine.flush();
         })
         .catch((error) => {
@@ -338,6 +355,7 @@ export async function openNizhalStore<
       for (const unsub of pokeUnsubs) unsub();
       if (intervalTimer) clearInterval(intervalTimer);
       stopChanges?.();
+      crossTab?.close();
       await engine.dispose();
     },
   };

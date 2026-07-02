@@ -16,6 +16,9 @@
   },
   "devDependencies": {
     "typescript": "^5.9.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "better-sqlite3": "^12.11.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "tsx": "^4.22.4"
   }
 }

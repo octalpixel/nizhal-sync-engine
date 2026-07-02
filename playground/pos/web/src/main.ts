@@ -38,6 +38,7 @@ async function boot() {
     actor: { userId: "till-1", ownerId: "shop-1" },
     database: waSqliteDrizzle({ sqlite3, database, config: { schema } }),
     changes: waSqliteChanges(sqlite3, database),
+    crossTabChannel: "pos", // multi-tab: sibling tabs' watchers re-run when this tab writes
     onlineDetector,
   });
   (globalThis as Record<string, unknown>).__pos = store; // dev/E2E handle
