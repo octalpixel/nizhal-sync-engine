@@ -36,6 +36,7 @@ interface PgColumnLike {
   columnType: string;
   primary: boolean;
   notNull: boolean;
+  hasDefault: boolean;
   enumValues?: string[];
 }
 
@@ -102,7 +103,9 @@ export function deriveSqliteSchema<S extends Record<string, unknown>>(
       let derived = override ?? deriveColumn(tableName, pgColumn);
       if (pgColumn.primary) {
         derived = (derived as unknown as { primaryKey(): SQLiteColumnBuilderBase }).primaryKey();
-      } else if (pgColumn.notNull) {
+      } else if (pgColumn.notNull && !pgColumn.hasDefault) {
+        // A server-defaulted column (defaultNow, …) cannot be NOT NULL on the client: mutators
+        // legitimately omit it (the server fills it authoritatively; pull brings the real value).
         derived = (derived as unknown as { notNull(): SQLiteColumnBuilderBase }).notNull();
       }
       columns[columnKey] = derived;

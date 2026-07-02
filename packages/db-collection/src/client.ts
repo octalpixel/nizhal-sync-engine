@@ -451,6 +451,9 @@ export function createNizhalClient(config: NizhalClientConfig): NizhalClient {
 
     reportError(phase, error) {
       status.setError(phase, error);
+      // Real sync failures must never be invisible — status-only reporting made push/pull
+      // errors silently vanish (observability lesson from the drizzle-native rollout).
+      console.error(`[nizhal:${phase}]`, error);
     },
 
     getMode() {

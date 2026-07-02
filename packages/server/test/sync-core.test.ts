@@ -153,7 +153,8 @@ describe("sync core", () => {
 
     expect(ids).toEqual([100, 101, 102, 103, 104]);
     expect(typeof cursor).toBe("string");
-  }, 10_000);
+    // 30s like the sibling above: PGlite paging is slow under machine load (observed flake at 10s).
+  }, 30_000);
 
   it("emits soft-delete tombstones and bucket-exit removals", async () => {
     const { db, storage } = await createProvisionedStorage();

@@ -40,6 +40,17 @@ export interface PullLoop {
   dispose(): void;
 }
 
+// Wire values arrive as JSON (HTTP pull): timestamps are ISO strings / epoch numbers, but the
+// derived timestamp columns' driver mappers expect Date. Coerce per column type before insert.
+function coerceForColumn(column: SQLiteColumn, value: unknown): unknown {
+  if (value == null) return value;
+  if (column.columnType === "SQLiteTimestamp" && !(value instanceof Date)) {
+    const date = new Date(value as string | number);
+    return Number.isNaN(date.getTime()) ? value : date;
+  }
+  return value;
+}
+
 function pk(table: SQLiteTable): SQLiteColumn {
   const primaries = Object.values(getTableColumns(table) as Record<string, SQLiteColumn>).filter(
     (column) => column.primary,
@@ -69,9 +80,11 @@ export function createPullLoop(opts: PullLoopOptions): PullLoop {
         const filtered: Record<string, unknown> = {};
         const set: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(row)) {
-          if (!columns[key]) continue;
-          filtered[key] = value;
-          if (columns[key] !== pkColumn) set[key] = value;
+          const column = columns[key];
+          if (!column) continue;
+          const coerced = coerceForColumn(column, value);
+          filtered[key] = coerced;
+          if (column !== pkColumn) set[key] = coerced;
         }
         const insert = opts.db.insert(table).values(filtered);
         await (Object.keys(set).length > 0

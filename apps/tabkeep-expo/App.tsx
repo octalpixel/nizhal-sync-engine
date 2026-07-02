@@ -64,6 +64,7 @@ async function fetchSession(): Promise<CachedSession> {
 function LedgerApp() {
   const [client, setClient] = useState<Client | null>(null);
   const [needsConnection, setNeedsConnection] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -95,11 +96,17 @@ function LedgerApp() {
             database: tabkeepDb.database,
             changes: tabkeepDb.changes,
           }),
-        onOpen: setClient,
+        onOpen: (opened) => {
+          setClient(opened);
+          // Dev handle for driving/verifying the store from the browser console and E2E tooling.
+          (globalThis as { __tabkeep?: Client }).__tabkeep = opened;
+        },
         onConnectionRequired: setNeedsConnection,
       });
       if (disposed) boot.dispose();
-    })();
+    })().catch((error: unknown) => {
+      setBootError(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    });
 
     return () => {
       disposed = true;
@@ -107,6 +114,16 @@ function LedgerApp() {
     };
   }, []);
 
+  if (bootError) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.brand}>Tabkeep</Text>
+        <Text style={styles.muted}>Failed to open the local store:</Text>
+        <Text style={styles.muted}>{bootError}</Text>
+        <StatusBar style="auto" />
+      </SafeAreaView>
+    );
+  }
   if (needsConnection && !client) {
     return (
       <SafeAreaView style={styles.center}>

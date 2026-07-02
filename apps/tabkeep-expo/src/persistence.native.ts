@@ -5,7 +5,6 @@ import { open } from "@op-engineering/op-sqlite";
 import { drizzle } from "drizzle-orm/op-sqlite";
 
 export interface TabkeepDatabase {
-  // biome-ignore lint/suspicious/noExplicitAny: driver-generic drizzle db handle.
   database: any;
   changes: TableChangeSource;
   /** Durable KV for the cached session (rides the same SQLite file as the store). */

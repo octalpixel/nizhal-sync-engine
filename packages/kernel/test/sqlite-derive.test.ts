@@ -28,6 +28,8 @@ describe("deriveSqliteSchema", () => {
     expect(columns.name?.notNull).toBe(true);
     expect(columns.active?.columnType).toBe("SQLiteBoolean");
     expect(columns.updated_at?.columnType).toBe("SQLiteTimestamp");
+    // server-defaulted columns lose NOT NULL on the client (mutators legitimately omit them)
+    expect(columns.updated_at?.notNull).toBe(false);
     expect(columns.meta?.columnType).toBe("SQLiteTextJson");
     expect(columns.count?.columnType).toBe("SQLiteInteger");
     expect(columns.count?.notNull).toBe(false);

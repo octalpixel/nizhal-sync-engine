@@ -27,7 +27,6 @@ import { type PullLoop, createPullLoop } from "./pull.js";
 import { type PushEngine, createPushEngine } from "./push.js";
 import type { AnyDrizzleSqliteDb, DerivedTableMap } from "./types.js";
 
-// biome-ignore lint/suspicious/noExplicitAny: mutator arg types are per-definition; the map is heterogeneous.
 type AnyMutators = Record<string, NizhalMutatorDefinition<any>>;
 
 export interface OpenNizhalStoreOptions<

@@ -14,7 +14,6 @@ export async function createTabkeepExpoClient(options: {
   refreshToken?: () => Promise<string>;
   /** Dedicated CF realtime Worker host — set for a serverless server (Vercel) + CF Worker realtime. */
   realtimeHost?: string;
-  // biome-ignore lint/suspicious/noExplicitAny: driver-generic drizzle db handle.
   database: any;
   changes?: TableChangeSource;
 }) {

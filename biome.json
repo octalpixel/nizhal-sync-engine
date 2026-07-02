@@ -1,6 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "ignoreUnknown": true,
     "ignore": [
@@ -16,17 +20,29 @@
       "**/ios/**",
       "**/android/**",
       "**/.vercel/**",
-      "**/.expo/**"
+      "**/.expo/**",
+      "apps/tabkeep-expo/public"
     ]
   },
-  "organizeImports": { "enabled": true },
+  "organizeImports": {
+    "enabled": true
+  },
   "linter": {
     "enabled": true,
     "rules": {
       "recommended": true,
-      "suspicious": { "noExplicitAny": "off" },
-      "correctness": { "noUnusedVariables": "warn" }
+      "suspicious": {
+        "noExplicitAny": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "warn"
+      }
     }
   },
-  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 }
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  }
 }

@@ -8,7 +8,8 @@
     "web": "expo start --web",
     "ios": "expo run:ios",
     "android": "expo run:android",
-    "check-types": "tsc -p tsconfig.json --noEmit"
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "dev-server": "tsx scripts/dev-server.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~56.0.15",
@@ -30,10 +31,15 @@
     "react-native-nitro-text-decoder": "^0.2.0",
     "react-native-nitro-websockets": "^1.0.3",
     "react-native-web": "^0.21.2",
-    "@nizhal/local": "workspace:*"
+    "@nizhal/local": "workspace:*",
+    "wa-sqlite": "^1.0.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "@nizhal/server": "workspace:*",
+    "tsx": "^4.22.4",
+    "hono": "^4.12.27",
+    "postgres": "^3.4.5"
   }
 }

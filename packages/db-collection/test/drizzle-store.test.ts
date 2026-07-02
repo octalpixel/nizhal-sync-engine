@@ -9,7 +9,7 @@ import { postgresStorage } from "@nizhal/server/adapters";
 import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { boolean, pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { nizhalOutbox } from "../src/drizzle/control-schema.js";
 import {
@@ -28,6 +28,9 @@ const tasks = pgTable("dz_tasks", {
   owner_id: text("owner_id").notNull(),
   title: text("title").notNull(),
   done: boolean("done").notNull(),
+  // Server-defaulted NOT NULL column the mutators never provide — regression for the
+  // "client NOT NULL on server-defaulted column" bug found live in tabkeep web.
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 const schema = { tasks };
 
@@ -83,7 +86,8 @@ async function createHarness() {
       id text primary key,
       owner_id text not null,
       title text not null,
-      done boolean not null default false
+      done boolean not null default false,
+      created_at timestamptz not null default now()
     )
   `);
   await storage.provision({ schema: {}, syncRules });
@@ -161,7 +165,10 @@ describe("drizzle-native sync client (real server on pglite)", () => {
       .select()
       .from(b.store.tables.tasks)
       .where(eq(b.store.tables.tasks.done, false));
-    expect(rows).toEqual([{ id: "t1", owner_id: "dz-owner", title: "from A", done: false }]);
+    expect(rows.map(({ created_at, ...rest }) => rest)).toEqual([
+      { id: "t1", owner_id: "dz-owner", title: "from A", done: false },
+    ]);
+    expect(rows[0]?.created_at).toBeInstanceOf(Date);
   });
 
   it("watch re-runs live on both optimistic writes and pulled authoritative rows", async () => {

@@ -116,10 +116,25 @@ importers:
       react-native-web:
         specifier: ^0.21.2
         version: 0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      wa-sqlite:
+        specifier: ^1.0.0
+        version: 1.0.0
     devDependencies:
+      '@nizhal/server':
+        specifier: workspace:*
+        version: link:../../packages/server
       '@types/react':
         specifier: ~19.2.2
         version: 19.2.17
+      hono:
+        specifier: ^4.12.27
+        version: 4.12.27
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
       typescript:
         specifier: ~5.9.2
         version: 5.9.3
