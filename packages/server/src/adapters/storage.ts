@@ -490,22 +490,42 @@ function decodeCursor(cursor: Cursor): CursorPosition | null {
 async function normalizePullCursor(
   db: NizhalDb,
   cursor: Cursor,
-): Promise<{ effective: CursorPosition; horizon: bigint; reset: boolean }> {
-  // The settled-prefix horizon: every transaction with xid < horizon is committed-or-aborted, and no
-  // future write can ever be assigned an xid below it. Advancing the cursor only up to here makes the
-  // out-of-order-commit skip structurally impossible (see _nizhal_next_row_version).
-  const horizonRows = await executeRows<{ horizon: unknown }>(
+): Promise<{
+  effective: CursorPosition;
+  horizon: bigint;
+  reset: boolean;
+  epoch: string;
+  gcHorizon: bigint | null;
+}> {
+  // One round-trip fetches: the settled-prefix horizon (every transaction with xid < horizon is
+  // committed-or-aborted, and no future write can be assigned an xid below it — advancing the cursor
+  // only up to here makes the out-of-order-commit skip structurally impossible; see
+  // _nizhal_next_row_version), plus the server epoch and the tombstone GC horizon from the singleton
+  // _nizhal_sync_control (folded in to avoid a second round-trip per pull).
+  const rows = await executeRows<{ horizon: unknown; epoch: string; gc_horizon: unknown }>(
     db,
-    sql`select pg_snapshot_xmin(pg_current_snapshot())::text as horizon`,
+    sql`select pg_snapshot_xmin(pg_current_snapshot())::text as horizon,
+        sc.epoch as epoch,
+        sc.tombstone_horizon::text as gc_horizon
+      from _nizhal_sync_control sc where sc.id = true`,
   );
-  const horizon = bigintValue(horizonRows[0]?.horizon) ?? 0n;
+  const row = rows[0];
+  const horizon = bigintValue(row?.horizon) ?? 0n;
+  const gcHorizon = bigintValue(row?.gc_horizon);
+  const epoch = row?.epoch ?? "";
   const decoded = decodeCursor(cursor);
   // null = unparseable/legacy cursor; seq beyond the horizon = corrupt (a valid cursor only ever
   // advances over delivered rows, which are all below a past horizon). Either way, re-bootstrap.
   if (decoded === null || decoded.seq > horizon) {
-    return { effective: { ...INITIAL_POSITION }, horizon, reset: true };
+    return { effective: { ...INITIAL_POSITION }, horizon, reset: true, epoch, gcHorizon };
   }
-  return { effective: decoded, horizon, reset: false };
+  // GC horizon: a cursor strictly older than the pruned-tombstone watermark has missed deletions
+  // whose tombstones no longer exist — re-bootstrap so those rows don't resurrect. seq 0 is a fresh
+  // bootstrap (nothing yet delivered, nothing to miss), so it is exempt.
+  if (gcHorizon !== null && decoded.seq > 0n && decoded.seq < gcHorizon) {
+    return { effective: { ...INITIAL_POSITION }, horizon, reset: true, epoch, gcHorizon };
+  }
+  return { effective: decoded, horizon, reset: false, epoch, gcHorizon };
 }
 
 async function getPostgresChanges(
@@ -615,6 +635,7 @@ async function getPostgresChanges(
     removed,
     removedBuckets,
     cursor: nextCursor,
+    epoch: normalized.epoch,
     ...(cursorReset ? { cursorReset: true } : {}),
     ...(hasMore ? { hasMore: true } : {}),
   };
@@ -1294,10 +1315,19 @@ function engineStatements(): string[] {
     `create table if not exists _nizhal_sync_control (
   id boolean primary key default true,
   suppress_notify boolean not null default false,
+  epoch text not null default gen_random_uuid()::text,
+  tombstone_horizon xid8,
   updated_at timestamptz not null default now(),
   constraint _nizhal_sync_control_singleton check (id)
 )`,
     "insert into _nizhal_sync_control (id) values (true) on conflict (id) do nothing",
+    // Additive evolution for installs provisioned before epochs/GC-horizon existed. epoch is minted
+    // once here (stable across re-provisions — only `nizhal reset` drops the row → new epoch).
+    "alter table _nizhal_sync_control add column if not exists epoch text",
+    "alter table _nizhal_sync_control alter column epoch set default gen_random_uuid()::text",
+    "update _nizhal_sync_control set epoch = gen_random_uuid()::text where epoch is null",
+    "alter table _nizhal_sync_control alter column epoch set not null",
+    "alter table _nizhal_sync_control add column if not exists tombstone_horizon xid8",
     // Lock-free, commit-ordered watermark: the writing transaction's monotonic 64-bit id. Replaces a
     // singleton FOR UPDATE (which serialized ALL writes to force assignment-order == commit-order).
     // Readers stay no-skip by only advancing their cursor to pg_snapshot_xmin (the settled-prefix

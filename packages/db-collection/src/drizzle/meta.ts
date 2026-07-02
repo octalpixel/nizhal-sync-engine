@@ -8,12 +8,17 @@ import { nizhalDeadLetter, nizhalMeta } from "./control-schema.js";
 import type { AnyDrizzleSqliteDb } from "./types.js";
 
 const CURSOR_PREFIX = "cursor:";
+const EPOCH_PREFIX = "epoch:";
 const CLIENT_ID_KEY = "client-id";
 
 export interface NizhalMetaStore extends MutationIdStorage {
   getCursor(syncRule: string): Promise<Cursor | undefined>;
   /** Written by pull-apply INSIDE its transaction — pass the tx-scoped db there. */
   setCursor(db: AnyDrizzleSqliteDb, syncRule: string, cursor: Cursor): Promise<void>;
+  /** Last server epoch seen for a rule; undefined before the first pull. */
+  getEpoch(syncRule: string): Promise<string | undefined>;
+  /** Written by pull-apply INSIDE its transaction — pass the tx-scoped db there. */
+  setEpoch(db: AnyDrizzleSqliteDb, syncRule: string, epoch: string): Promise<void>;
   getOrCreateClientId(): Promise<string>;
 }
 
@@ -39,6 +44,8 @@ export function createMetaStore(db: AnyDrizzleSqliteDb): NizhalMetaStore {
       (await read(`${CURSOR_PREFIX}${syncRule}`)) as Cursor | undefined,
     setCursor: (target, syncRule, cursor) =>
       write(target, `${CURSOR_PREFIX}${syncRule}`, String(cursor)),
+    getEpoch: (syncRule) => read(`${EPOCH_PREFIX}${syncRule}`),
+    setEpoch: (target, syncRule, epoch) => write(target, `${EPOCH_PREFIX}${syncRule}`, epoch),
     getOrCreateClientId: async () => {
       const existing = await read(CLIENT_ID_KEY);
       if (existing) return existing;

@@ -145,6 +145,15 @@ export async function openNizhalStore<
     bucketColumns[tableName] = info.bucketColumns[0];
   }
   const syncRuleNames = [...new Set([...synced.values()].map((info) => info.syncRule))];
+  // rule → the derived SQLite tables it hydrates, for the re-bootstrap wipe (epoch/GC reset).
+  const tablesByRule: Record<string, SQLiteTable[]> = {};
+  for (const [tableName, info] of synced) {
+    const table = byName[tableName];
+    if (!table) continue;
+    const list = tablesByRule[info.syncRule];
+    if (list) list.push(table as SQLiteTable);
+    else tablesByRule[info.syncRule] = [table as SQLiteTable];
+  }
 
   // Bootstrap DDL (additive-only; schema evolution at alpha = re-derive + re-bootstrap).
   for (const ddl of CONTROL_TABLE_DDL) await db.run(sql.raw(ddl));
@@ -231,6 +240,7 @@ export async function openNizhalStore<
       actor: opts.actor,
       bucketColumns,
       syncRules: syncRuleNames,
+      tablesForRule: (rule) => tablesByRule[rule] ?? [],
       onTablesChanged: (tables) => notifyTables(tables),
     });
     for (const rule of syncRuleNames) {

@@ -29,6 +29,8 @@ export interface PullLoopOptions {
   /** table name → bucket column name (from describeSyncedTables), for removedBuckets eviction. */
   bucketColumns: Record<string, string | undefined>;
   syncRules: readonly string[];
+  /** The derived SQLite tables a sync rule hydrates — wiped on a re-bootstrap (epoch/GC reset). */
+  tablesForRule(syncRule: string): SQLiteTable[];
   onTablesChanged(tables: ReadonlySet<string>): void;
 }
 
@@ -124,6 +126,15 @@ export function createPullLoop(opts: PullLoopOptions): PullLoop {
     return touched;
   }
 
+  // Re-bootstrap wipe: on an epoch change (server reset/restore) or GC-horizon reset, the server's
+  // from-0 snapshot is authoritative but UPSERT-only apply can't remove rows the server deleted while
+  // the client was away (their tombstones may have been GC'd). Clear the rule's tables first so the
+  // snapshot fully replaces local state — deleted rows don't resurrect. The outbox is untouched and
+  // replayed afterward, so pending optimistic writes survive.
+  async function wipeTables(tables: SQLiteTable[]): Promise<void> {
+    for (const table of tables) await opts.db.delete(table);
+  }
+
   // D6 replay-rebase: after authoritative rows land, re-run every pending outbox mutation in
   // ordinal order. MutatorTx writes are upserts, so replay is idempotent under re-execution.
   async function replayOutbox(): Promise<void> {
@@ -142,6 +153,11 @@ export function createPullLoop(opts: PullLoopOptions): PullLoop {
     try {
       const pageSize = opts.echo.getPullPageSize();
       let cursor: Cursor = (await opts.meta.getCursor(syncRule)) ?? opts.echo.getCursor(syncRule);
+      let storedEpoch = await opts.meta.getEpoch(syncRule);
+      // needWipe carries an epoch-triggered reset across the re-pull from 0; wiped guards the wipe to
+      // exactly once per reset cycle so later pages of the same snapshot only upsert.
+      let needWipe = false;
+      let wiped = false;
       let keepPaging = true;
       while (keepPaging && !closed) {
         const result = (await opts.echo.pull({
@@ -151,18 +167,41 @@ export function createPullLoop(opts: PullLoopOptions): PullLoop {
           ...(pageSize !== undefined ? { limit: pageSize } : {}),
         })) as PullResult<Record<string, unknown>>;
         if (closed) return false;
-        if (result.cursorReset) {
+
+        // Epoch change = server reset/restore. If this response is a stale-cursor delta (not already
+        // a from-0 snapshot), discard it and re-pull from INITIAL for a full snapshot; adopt the new
+        // epoch so the re-pull doesn't loop. cursorReset responses are already from-0 → fall through.
+        const epochChanged =
+          result.epoch !== undefined && storedEpoch !== undefined && storedEpoch !== result.epoch;
+        if (epochChanged && result.cursorReset !== true && cursor !== INITIAL_CURSOR) {
+          storedEpoch = result.epoch;
+          needWipe = true;
           cursor = INITIAL_CURSOR;
+          continue;
         }
 
+        const doWipe = (result.cursorReset === true || epochChanged || needWipe) && !wiped;
+
         const touched = await opts.gate.run(opts.db, async () => {
+          if (doWipe) {
+            await wipeTables(opts.tablesForRule(syncRule));
+            wiped = true;
+          }
           const changed = await applyResult(result);
-          if (changed.size > 0) await replayOutbox();
+          if (changed.size > 0 || doWipe) await replayOutbox();
           await opts.meta.setCursor(opts.db, syncRule, result.cursor);
+          if (result.epoch !== undefined) await opts.meta.setEpoch(opts.db, syncRule, result.epoch);
           return changed;
         });
+        if (result.epoch !== undefined) storedEpoch = result.epoch;
         opts.echo.setCursor(syncRule, result.cursor);
-        if (touched.size > 0) opts.onTablesChanged(touched);
+        const notify = doWipe
+          ? new Set([
+              ...touched,
+              ...opts.tablesForRule(syncRule).map((table) => getTableName(table)),
+            ])
+          : touched;
+        if (notify.size > 0) opts.onTablesChanged(notify);
 
         cursor = result.cursor;
         if (!pageSize) break;

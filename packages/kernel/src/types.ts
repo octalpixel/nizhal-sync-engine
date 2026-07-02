@@ -148,6 +148,13 @@ export interface PullResult<T = unknown> {
   cursor: Cursor;
   /** True when the server clamped an invalid/future cursor to 0 (full re-bootstrap). */
   cursorReset?: boolean;
+  /**
+   * Server generation id — a uuid minted at provision, regenerated on `nizhal reset` (and by the
+   * restore-from-backup runbook). The client persists it and, on mismatch, discards its cursor and
+   * re-bootstraps: the guard against a Postgres restore that regressed the row-version horizon and
+   * would otherwise silently strand every client. Absent only from adapters that predate epochs.
+   */
+  epoch?: string;
   /** True when a page limit truncated the result and another pull is needed. */
   hasMore?: boolean;
   /** Server-authoritative mutation sequence for the requesting client. */

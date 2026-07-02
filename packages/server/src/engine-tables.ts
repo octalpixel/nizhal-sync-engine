@@ -36,6 +36,13 @@ export const nizhalTombstones = pgTable("_nizhal_tombstones", {
 export const nizhalSyncControl = pgTable("_nizhal_sync_control", {
   id: boolean("id").primaryKey().default(true),
   suppressNotify: boolean("suppress_notify").notNull().default(false),
+  // Server generation id — minted at provision, regenerated on reset/restore. Returned in every
+  // pull so a client can detect a restore-from-backup and re-bootstrap. See PullResult.epoch.
+  epoch: text("epoch").notNull(),
+  // GC horizon: the max row_version among GC'd tombstones. A pull whose cursor is strictly below
+  // this must re-bootstrap (its missed deletions have been pruned). xid8 stored as bigint (see
+  // nizhalTombstones.rowVersion — drizzle has no xid8 type; numeric text round-trips).
+  tombstoneHorizon: bigint("tombstone_horizon", { mode: "bigint" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
