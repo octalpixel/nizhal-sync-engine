@@ -111,6 +111,31 @@ Pinning policy:
   `crypto.randomUUID`; bare React Native apps should add `react-native-get-random-values` for
   crypto-grade ids.
 
+## Deploying realtime on serverless / multi-instance (Vercel, etc.)
+
+Vercel now serves WebSockets (Fluid compute), and Nizhal fits its model well: a connection is pinned
+to a function instance and **closes at the function's max duration**, so clients must reconnect — which
+is exactly `createWebSocketSource`'s reconnect + catch-up-pull, and the poke is only a hint (the cursor
+pull is authoritative), so a dropped socket self-heals. The server is a standard `@hono/node-server`
+WS app, which Vercel supports directly.
+
+**The trap:** the default **`inProcessRealtime` does not work across instances.** It is an in-memory,
+per-process registry — a poke published by the instance that handled the *write* never reaches a socket
+held by a *different* instance. On a single warm dev instance it appears to work; under real
+multi-instance scale (Vercel, any horizontally-scaled deploy) sockets on other instances silently miss
+every poke. (They still converge via the interval pull, but you've lost realtime.) So on serverless /
+multi-instance, pick a cross-instance adapter:
+
+- **`listenNotifyRealtime`** — cross-instance via Postgres `LISTEN/NOTIFY`. Requirement: it holds a
+  persistent `LISTEN` connection, which **does not survive a transaction-mode pooler** (PgBouncer,
+  Neon's pooled endpoint). Give it a **direct** (session-mode) Postgres connection.
+- **`cloudflareRealtime`** — realtime lives in a stateful Cloudflare Worker Durable Object beside the
+  (stateless) data server. This is the intended topology when the data server is serverless.
+
+Rule of thumb: **`inProcessRealtime` is for a single long-lived process only.** Multi-instance →
+`listenNotifyRealtime` (direct PG) or `cloudflareRealtime`. Note this cross-instance behavior cannot be
+caught by local single-process tests — it only surfaces with ≥2 server instances.
+
 ## Known follow-ups
 
 - `@nizhal/local` web bootstrap helper (`openWebDatabase({ name, wasmUrl })`) to collapse the
