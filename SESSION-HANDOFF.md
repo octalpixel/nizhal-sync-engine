@@ -1,148 +1,103 @@
 # Session handoff — Nizhal (echo) sync engine
 
-**Branch:** `fix/sync-engine-data-loss` (local) → pushed to origin's `fix/sync-engine-data-loss`
-and `nizhal-engine/main`. Tree clean at last push.
+**Branch:** `fix/sync-engine-data-loss` → pushed to `origin/fix/sync-engine-data-loss` **and**
+`nizhal-engine/main`. Tree clean; HEAD = `ac6ddf4`.
 **Repo:** `/Users/mithushancj/Documents/personal/echo` (pnpm + turbo monorepo).
 
-## ⭐ START HERE (2026-07-03) — Production-readiness RFC authored; next session EXECUTES it
+## ⭐ START HERE (2026-07-03)
 
-**The whole plan is `rfcs/rfc-production-readiness.md`** — X = 28 tasks in 7 phases (P1 truth
-pass + npm `0.1.0` → P2 resync/epoch/tombstone-GC keystone → P3 chaos rig → P4 schema evolution
-→ P5 load → P6 fleet polish → P7 pilot/rollout), targeting a 50k-user production release. Do not
-re-derive the gap analysis: the RFC's "Verified current state" section was checked empirically on
-2026-07-03 (grep/npm evidence inline). Six defaults await confirm-or-override in its Decisions
-table (D1 MIT · D2 fold `@nizhal/react-native` · D3 bless Vite-web, Metro unsupported ·
-D4 30-day tombstone retention · D5 publish `0.1.0` · D6 multi-tab caveat, Arc B optional).
-Harness task list mirrors the phases (tasks #23–#29). Start at P1/T1; P1+P2 strictly in order.
+The production-readiness RFC (`rfcs/rfc-production-readiness.md`) is **substantially executed**, and
+this session added a **hostability** layer on top. Everything below is committed + pushed to both
+remotes. What remains is **three user-gated items** (publish, live Vercel, Argent) — not more building.
 
-Key non-obvious facts the RFC leans on (verified, save the re-discovery):
-- `cursorReset` already exists END-TO-END (server `storage.ts:618`, client `pull.ts:154` with
-  re-bootstrap + outbox replay) — P2 adds only the epoch + GC-horizon *triggers*.
-- Pull is already paginated/resumable (`hasMore` + per-page cursor); `listenNotifyRealtime` and
-  the `_nizhal_jobs` runner already exist — GC is a job registration, not new infra.
-- npm scope `@nizhal` was UNCLAIMED on 2026-07-03 (`npm view @nizhal/kernel` → 404); create the
-  org before `changeset publish`.
-- README/changeset still describe the deleted TanStack plane; no LICENSE; `@nizhal/react-native`
-  still imports `@tanstack/offline-transactions`; root `pnpm test` broken (deleted `emulation`
-  filter) — all P1 tasks.
+**Do not re-derive** the sync architecture — it's captured in `docs/deploy.md` (the three-plane model
++ hosting), `docs/api.md`, and the RFCs. Read those, not the code, to get oriented.
 
-## Update (2026-07-02, evening) — multi-device/multi-tab verified; ONE open web-boot issue
+### Done in the production-readiness RFC (see the harness task list #1–#29, and git log)
+- **P1** (T1–T6): README/docs truth pass, LICENSE (MIT), folded `@nizhal/react-native`, root `pnpm
+  test` fixed, per-package READMEs. **T7 (publish 0.1.0) is the one P1 task still open — PAUSED.**
+- **P2** (T8–T11): server epoch + GC-horizon resync triggers + tombstone GC job + fleet-return e2e.
+- **P3** (T12–T14): fault-injection chaos harness + deterministic scenarios + CI wiring.
+- **P4** (T15–T18): contract version + `426 upgrade_required`, additive-only migrate guard, on-device
+  derived-schema migration, `docs/schema-evolution.md`. Plus a T-extra actor-identity guard.
 
-**Multi-device (B2 POS, web+headless):** three devices (browser, second tab, Node till) against
-the plain REST backend — 7 orders / 7 distinct ids, zero dup/loss, stock exact. Found+fixed the
-Arc-B follower-reactivity gap live: `openNizhalStore({ crossTabChannel })` (BroadcastChannel poke).
+### Done this session — hostability (H1–H6), the server is now platform-agnostic
+Commits `cc72275`, `dba314e`, `43132bf`, `326c6e7`. Summary:
+- **Real production bug found + fixed** (`cc72275`): `listenNotifyRealtime`'s `pg_notify` triggers were
+  never installed → realtime was **silently dead** on any real deploy. Now auto-installed by
+  `listen()` / `provisionRealtime()`. Verified on **real Neon**, cross-instance `delivered=TRUE`.
+- **Platform-agnostic entrypoint** (`dba314e`, H1/H5/H6): `NizhalServer` now exposes `webSocket`
+  (injectable WS factory, `config.createWebSocket`), `injectWebSocket`, `provisionRealtime`,
+  `runJobsOnce`. HTTP already ran anywhere via `app.fetch`; realtime is now portable too.
+- **`playground/deploy`** — one `domain.mjs`, four entrypoints (Node container / Bun / Vercel
+  serverless `api/server.mjs`+`api/drain.mjs` / Dockerfile) + host-agnostic `smoke.mjs`.
+- **`docs/deploy.md`** (H4): container/serverless/edge matrix, realtime + auth per class, the
+  "every host needs one Postgres" (transactional outbox) rationale, and a webhook-write recipe.
 
-**Mobile (tabkeep, iOS sim):** shipped `opSqliteDrizzle` in `@nizhal/local/op-sqlite` — drizzle's
-own op-sqlite driver targets the pre-v11 API (calls `executeAsync`/`executeRawAsync`, reads
-`rows._array`); found live on-device, shimmed with the v17 shapes. Also `safeRandomUUID`
-everywhere in the drizzle plane (Hermes). PROVEN live: mobile boots on op-sqlite, shows the
-web-created row (cross-device ←), adds "Ravi Mobile" → row lands in local Postgres (→), instant
-optimistic render.
+### Two post-1.0 RFCs authored this session (PROPOSED, non-blocking backlog)
+- `rfcs/rfc-redis-streams-realtime.md` — a 4th `RealtimeAdapter` for teams behind a transaction-mode
+  pooler (where `listenNotify`'s `LISTEN` can't survive) or already running Redis.
+- `rfcs/rfc-framework-free-core.md` — extract `@nizhal/server/core` (Web-standard `Request→Response`
+  handlers); `createNizhalServer` becomes a thin Hono binding. No protocol/client change.
 
-**OPEN ISSUE — tabkeep WEB boot fails in the current dev environment** (was verified end-to-end
-this morning, commit 8dbffc1): `TypeError: Cannot convert object to primitive value` at
-`wa-sqlite-async.mjs` `_malloc` (asyncify export-instrumentation wrapper), thrown from
-`SQLite.Factory` in bundle context only. Ruled out: served assets byte-identical to disk+morning;
-code path identical to verified (no-args factory); fresh Chrome profile; single Metro; `expo
-start -c` full rebundle; no service workers. Console-context factory runs "fine" but note: the
-wrapper only detonates on the FIRST wasm export call (`_malloc`), which console probes never made
-— so console "success" was not a valid control. Suspected mechanism (recorded for next session):
-the glue's instrumentation wrapper is an arrow function referencing `arguments` (dist line ~1204)
-— forwards the ENCLOSING scope's args to `_malloc`; investigate what toggles the instrumentation
-(asyncify assertions) between morning and now, and whether the sim app's Hermes debugger being
-attached to the same Metro flips dev flags. Repro: single Metro 8081, open web, boot fails at
-Factory. Workaround candidates: bundle the glue via Vite-style path (local-notes pattern works),
-or expo-sqlite web driver (COOP/COEP tax).
+## The three user-gated items (this is the actual "what's next")
+1. **T7 — publish `0.1.0` to npm.** PAUSED pending explicit confirm (standing instruction). The npm
+   scope `@nizhal` was UNCLAIMED on 2026-07-03 (`npm view @nizhal/kernel` → 404) — **create the org
+   first**, then publish `0.1.0` directly (not `changeset version`). Task #7.
+2. **H3 — live Vercel deploy.** The serverless entrypoint is code-complete and proven **locally** (ran
+   the exact `export default serve() + injectWebSocket` entry against throwaway Postgres → smoke 5/5).
+   A *live* deploy needs throwaway **Neon + Vercel** projects created (gated by the "confirm before
+   cloud create" rule) and the Vercel **WebSocket public-beta** permission. Task #26 (in_progress).
+3. **Argent 0.14.0** update available — apply only with explicit consent. Task #23.
 
-## Update (2026-07-02, latest) — Arc E: ONE standard — legacy plane DELETED
+## Non-obvious facts to not rediscover
+- **`listenNotifyRealtime` needs a DIRECT / session-mode Postgres URL.** A transaction pooler
+  (PgBouncer `transaction`, Neon/Supabase pooled) silently drops the persistent `LISTEN`. HTTP
+  push/pull are fine through a pooler; only realtime needs the direct connection.
+- **The Vercel entrypoint is verified LOCALLY only.** `@hono/node-server`'s `serve()` self-listens, so
+  `playground/deploy/api/server.mjs` was run as-is on `:3000` and smoked 5/5 — but the Vercel platform
+  wrapper + WS beta are unverified until H3's live deploy.
+- **`inProcessRealtime` is dev-only** and warns under `NODE_ENV=production` — it's a single-process
+  antipattern (a socket on instance A never hears a write on instance B).
+- **Three planes** (in `docs/deploy.md`): data (`/sync/push`+`/sync/pull`, transactional, authoritative)
+  · realtime (the `repull:<bucket>` poke, ephemeral hint, best-effort) · jobs (`_nizhal_jobs`, the
+  server's transactional outbox — enqueue is atomic-in-tx; drained by the job worker's poll loop on
+  `listen()` or by `runJobsOnce()` from cron on serverless). Tombstone GC is the one built-in,
+  self-perpetuating job on that plane.
 
-Per explicit direction ("less is more; ship one nomenclature"): the TanStack blob plane is gone
-from `@nizhal/db-collection` — `nizhalCollectionOptions`, `createNizhalMutators`,
-`openNizhalCollectionsStore`, `waSqlitePersistence`/`opSqlitePersistence`, CRDT helpers,
-client-group coordinator, and ALL `@tanstack/*` + `yjs` deps (client deps now: kernel + local +
-drizzle-orm). Legacy demo apps deleted (apps/tabkeep, notes, credit-ledger, emulation,
-op-sqlite-probe; playground/chat-nizhal†, linear-nizhal, pos) — git history keeps everything.
-† chat-nizhal source removal does NOT touch the live Vercel deployment or its Neon DB.
-**tabkeep-expo migrated for real**: one op-sqlite file (drizzle db + outbox + session KV),
-drizzle queries + cross-platform useLiveQuery; web is native-first pending wa-sqlite-under-Metro.
-`getchanges-bench` fixtures vendored into server tests. Gates: db-collection 47 ✓ (7 e2e vs real
-server + transport/protocol keepers) · server 74 ✓ · local 13 ✓ · kernel 12 ✓ · check-types ✓ ·
-lint 0. Follow-ups: pos rebuild on the new plane, wa-sqlite web driver wiring for tabkeep,
-Arc B coordinator on the one engine, chaos/emulation rig rebuild.
+## Verification state (last observed this session)
+- `pnpm lint` clean (179 files) · `check-types` green (server + kernel) · `@nizhal/server` suite
+  **82 passed / 4 skipped**; `test/entrypoint.test.ts` locks the new platform-agnostic API surface.
+- Deploy proofs: Node container smoke **5/5**, Bun **5/5**, Vercel-entry-local **5/5**, drain handler
+  3-way (no-secret / 403 / correct-secret); real-Neon cross-instance `listenNotify` delivered.
+- Real-PG tests are gated on `NIZHAL_TEST_DATABASE_URL` (skip without it), wired into CI's
+  real-postgres job.
 
-## Update (2026-07-02, later) — Arc D: the drizzle-native sync client SHIPPED (X→0)
+## Deeper post-1.0 backlog (unchanged from before, still open)
+- **Multi-tab (Arc B)** was decided a *documented caveat* (D6), off the mobile-release critical path.
+  If revisited: `rfcs/rfc-multitab-clientgroup.md` + the honest caveats there (the coordinator
+  duplicates ~200 lines of `createNizhalMutators`; `nextOrdinal()` is a non-atomic RMW; the browser
+  test used localStorage, not the riskier wa-sqlite/OPFS-shared-across-tabs path).
+- The two RFCs above (redis-streams realtime, framework-free core).
 
-`rfcs/rfc-drizzle-native-sync-client.md` executed to zero: **`openNizhalStore` is now the
-drizzle-native sync client** — one SQLite file: derived real tables (kernel `deriveSqliteSchema`,
-schema-once) + `nizhal_outbox`/`nizhal_meta`/`nizhal_dead_letter` as drizzle tables; one owned
-push engine (caveat 1 RESOLVED — `@tanstack/offline-transactions` gone from the new plane);
-pull-apply + cursor in one tx; D6 = direct-apply + replay-rebase, PROVEN. New e2e suite vs the
-real server (pglite): 7 ✓ incl. offline-write-survives-restart (the long-skipped scenario) and
-rebase-overwrite. Legacy plane lives on as `openNizhalCollectionsStore` (tabkeep ships on it;
-migrates after release). Gates: kernel 12 · db-collection 116 · server 74 · local 13 ·
-check-types 22/22 · lint 0. Follow-ups in the RFC closeout (pos migration first).
-
-## Update (2026-07-02 session) — Arc C: `@nizhal/local` (local-only native-Drizzle DX)
-
-Shipped a new standalone package **`@nizhal/local`** (WatermelonDB-class DX for purely local
-apps: drizzle-kit migrations applied on-device, real Drizzle query builder, cross-platform live
-queries — expo-sqlite / op-sqlite / browser wa-sqlite) plus the **`playground/local-notes`**
-reference app (verified live in Chrome via Argent: insert/delete live re-render, reload
-persistence). Zero sync-engine diffs. Docs: `docs/local.md`; decisions:
-`local-drizzle-implementation-notes.md`. Gates after: check-types 22/22, lint 0,
-server 74 passed, db-collection 109 passed, @nizhal/local 13/13.
-
-**Arc B (multi-tab) remains where the list below left it** (#28–#30 open). Priority call made
-this session (build-for-one): Arc C was the user's explicit ask and shipped first; before
-resuming Arc B, decide caveat 1 below (refactor `createNizhalMutators` to be
-shared-outbox-capable vs continuing the duplicate engine in `client-group.ts`).
-
-## What this session delivered (all committed + pushed)
-
-Two arcs. Reference the commits/RFCs — don't re-read them wholesale.
-
-### Arc A — Productization plan (plan: `research/nizhal-productization-plan.md`), all done
-- `b46af04` **Item 1a** — structured-`where` `MutatorTx`; deleted the Hermes-fragile drizzle key reflection (borrowed from better-drizzle; analysis in `.understanding/better-drizzle-borrow.md`).
-- `fa8c686` **Item 1** — `openNizhalStore` (derives collections from schema+syncRules) + kernel `describeSyncedTables`.
-- `c999e13` **Item 2** — `startLocalFirstBootstrap` + session stores; deleted per-app session files.
-- `314b4bc` **Item 3** — engine schema versioning (`_nizhal_meta`) + version-aware `provision` + v1→v2 bigint→xid8 migration + `nizhal reset`.
-- `8cfccd6` **Item 4** — CI `real-postgres` job (postgres:16 service) running the no-skip concurrency test.
-- `f502d8f` **Item 5** — tabkeep as the reference: transport-free `domain.ts` + `nizhal.config.ts`; proven deployable via `nizhal migrate` against a throwaway Postgres.
-- `f79ef35` fixed a committed NUL byte in `storage.ts`; `9775be4` merged biome format drift + fixed all lint rules (gate now green); `c7aec2c` **authoritative downward mutation-id resync on 409** (real fix) + made the db-collection suite deterministic (`fileParallelism: false`).
-
-### Arc B — Multi-tab ClientGroup (plan: `rfcs/rfc-multitab-clientgroup.md`), partial
-- `873b812` **Chunk 1** — `openNizhalClientGroup` (`packages/db-collection/src/client-group.ts`): Nizhal-owned leader-gated shared-outbox flush loop. 4/4 Node tests (`test/client-group.test.ts`).
-- `de73a1b` (+ `e2c77d5`) **browser adapter** (`src/client-group-browser.ts`: Web Locks + BroadcastChannel + localStorage) + an **Argent/CDP-driven** cross-tab browser test (`test/browser/`, see its README). **No Playwright/esbuild** (removed per user). Verified live in a real Chrome: Web Locks elected one leader, a follower tab's write was flushed by the leader tab past a transient 503, outbox drained.
-
-## Verification state (last observed)
-- `pnpm check-types` 19/19 · `pnpm lint` exit 0 · server suite 74/74 · db-collection 105 passed / 1 skipped (deterministic, ~3 min).
-- Browser cross-tab: verified live via Argent (not an automated CI test yet).
-
-## Pending tasks (harness task list)
-- **#28 Chunk 2** — allocate the shared per-client mutationID **and the enqueue ordinal** under the election mutex; leader **failover** (leader tab dies mid-flush → follower adopts, no gap/dup).
-- **#29 Chunk 3** — wire the existing `waSqlitePersistence` (wa-sqlite/OPFS) into the tabkeep **web** app (`apps/tabkeep-expo/src/persistence.ts` returns `undefined` today) + integrate the coordinator into `openNizhalStore`.
-- **#30 Chunk 4** — replace the `it.skip` in `packages/db-collection/test/repro-offline-loss-codex.test.ts` ("keeps an offline follower-tab write durable…") with the real coordinator scenario; graduate the browser flow into CI.
-- **#31** — Argent update `v0.13.0` available; only apply with explicit consent (`npx @swmansion/argent update`).
-
-## Known issues / caveats (the honest devil's-advocate list — read before continuing Arc B)
-1. **Coordinator duplicates the real engine.** `client-group.ts` reimplements ~200 lines of `createNizhalMutators` (mutationID alloc, 409 resync, retry, park) as an **incomplete** copy — **no optimistic collection apply, no HLC, no `dependsOn` cascade**. Strongly consider **refactoring `createNizhalMutators` to be shared-outbox-capable** instead of maintaining two push engines that will drift.
-2. **`nextOrdinal()` is a non-atomic RMW on shared meta.** Concurrent cross-tab enqueues can share an ordinal → **mis-ordering** (not loss; cmid is in the key). The "FIFO across tabs" guarantee only holds for sequential enqueues until Chunk 2 puts ordinal allocation under the mutex.
-3. **Browser test validates a simplified stack** — localStorage (not the production **wa-sqlite/OPFS shared across tabs**, which is the riskiest untested part: SQLite multi-tab concurrency) and a trivial always-accept echo (not the real server's contiguous-sequence check).
-4. The skipped repro test is **still skipped**; un-skipping is the Chunk 3/4 deliverable.
-5. **Opportunity cost (build-for-one):** multi-tab web is **off the mobile-release critical path** — the release target `tabkeep-expo` is single-process (no tabs). Reconsider Arc B priority vs shipping the mobile reference before sinking more into it.
-
-## Security constraints (must persist across sessions)
-- Never connect to or mutate any DB except a **session-created throwaway** (local Postgres.app DB or a fresh Neon branch). Prod/live/main-named DBs are off-limits (e.g. `ordereka-live-app-prod`).
-- Do **not** delete the Neon DBs backing live deployments without repointing.
-- No `git add -A` (name files); never push secrets. Use `NIZHAL_TEST_DATABASE_URL` for real-PG tests.
+## Security constraints (MUST persist across sessions)
+- Never connect to or mutate any DB except a **session-created throwaway** (local Postgres.app DB or a
+  fresh Neon branch). Prod/live/main-named DBs are off-limits (e.g. `ordereka-live-app-prod`).
+- Do **not** delete Neon DBs backing live deployments; **confirm before any cloud create/delete**
+  (Neon projects, Vercel projects). Don't touch the live `nizhal-chat` (Neon `square-hill-26087642`).
+- No `git add -A` (name files); never push secrets. `NIZHAL_TEST_DATABASE_URL` for real-PG tests.
+- Push every commit to **both** remotes (`origin/fix/sync-engine-data-loss` + `nizhal-engine HEAD:main`).
 
 ## How to run things
-- Tests: `pnpm --filter @nizhal/db-collection test` (deterministic, ~3 min) · `pnpm --filter @nizhal/server test`.
-- Real-PG no-skip test: `NIZHAL_TEST_DATABASE_URL=<throwaway> pnpm --filter @nizhal/server exec vitest run test/version-skip-concurrency.test.ts`.
-- Browser cross-tab QA: `pnpm --filter @nizhal/db-collection build && … serve:browser-harness`, then drive two `?tab=A`/`?tab=B` tabs via Argent (see `packages/db-collection/test/browser/README.md`).
+- Gates: `pnpm lint` · `pnpm --filter @nizhal/server check-types` · `pnpm --filter @nizhal/server test`.
+- Deploy smoke (container class): from `playground/deploy`,
+  `DATABASE_URL=postgres://…direct… JWT_SECRET=… pnpm --filter nizhal-deploy start`, then
+  `SERVER_URL=http://127.0.0.1:4700 node playground/deploy/smoke.mjs` → 5/5.
+- Bun: `pnpm --filter nizhal-deploy start:bun` (port 4720). Vercel-entry local: `node
+  playground/deploy/api/server.mjs` (self-listens :3000) then point the smoke at it.
 
 ## Suggested skills for the next session
-- **`/autonomous-stand`** — to drive Chunk 2→4 (or the mobile-release path) to done.
-- **`/build-for-one`** — to make the Arc-B-vs-mobile-release priority call first.
-- **`/diagnose`** — for the untested wa-sqlite/OPFS multi-tab concurrency (build a real feedback loop before trusting it).
-- **`/mobile-device-testing`** — Argent is the browser + iOS/Android driver here (Chromium via CDP; two `?tab=` tabs for cross-tab).
+- **`/autonomous-stand`** — to drive T7 (publish) or H3 (live Vercel) to done once unblocked.
+- **`/ship-it`** — the verification bar (no workarounds, prove "done") for the publish + live deploy.
+- **`/mobile-device-testing`** — Argent drives Chromium (CDP) + iOS/Android; used for the live browser
+  QA of the sync engine and any Vercel-hosted verification.
