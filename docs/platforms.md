@@ -129,7 +129,10 @@ other instances silently miss every poke. (They still converge via the interval 
 
 - **`listenNotifyRealtime`** — cross-instance via Postgres `LISTEN/NOTIFY`. Requirement: it holds a
   persistent `LISTEN` connection, which **does not survive a transaction-mode pooler** (PgBouncer,
-  Neon's pooled endpoint). Give it a **direct** (session-mode) Postgres connection.
+  Neon's pooled endpoint). Give it a **direct** (session-mode) Postgres connection. Its `pg_notify`
+  triggers are installed automatically when the server boots (`createNizhalServer(...).listen()`) — a
+  base `nizhal migrate` alone does not install them, so without this a server would `LISTEN` but never
+  receive a `NOTIFY` and realtime would be silently dead.
 - **`cloudflareRealtime`** — realtime lives in a stateful Cloudflare Worker Durable Object beside the
   (stateless) data server. This is the intended topology when the data server is serverless.
 

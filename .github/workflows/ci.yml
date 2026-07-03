@@ -43,5 +43,5 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: no-skip under real-Postgres concurrency
-        run: pnpm --filter @nizhal/server exec vitest run test/version-skip-concurrency.test.ts
+      - name: no-skip under real-Postgres concurrency + cross-instance realtime
+        run: pnpm --filter @nizhal/server exec vitest run test/version-skip-concurrency.test.ts test/listen-notify-realtime.test.ts

@@ -686,11 +686,27 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
     listen(port) {
       jobWorker?.start();
       if (gcDb) void seedTombstoneGc(gcDb, DEFAULT_TOMBSTONE_GC_INTERVAL_MS);
+      // Install the realtime adapter's own DDL — listenNotifyRealtime's pg_notify triggers. Without
+      // this the adapter LISTENs but nothing ever NOTIFYs, so realtime is silently dead (clients only
+      // converge via the interval pull). Idempotent (create-or-replace / drop-if-exists) + best-effort.
+      void realtime
+        .provision?.({ schema: config.schema, syncRules: config.syncRules })
+        .catch((error: unknown) => {
+          const detail = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[@nizhal/server] realtime.provision failed — notify triggers may be missing, so realtime pokes will not fire (clients still converge via interval pull): ${detail}`,
+          );
+        });
       const server = serve({ fetch: app.fetch, port });
       injectWebSocket(server);
       const close = server.close.bind(server);
       server.close = ((callback?: (err?: Error) => void) => {
-        const workerStopped = jobWorker?.stop() ?? Promise.resolve();
+        // Dispose the realtime adapter too — listenNotifyRealtime holds a persistent LISTEN connection
+        // that otherwise keeps the process alive after close().
+        const workerStopped = Promise.allSettled([
+          jobWorker?.stop() ?? Promise.resolve(),
+          realtime.stop?.() ?? Promise.resolve(),
+        ]);
         return close((error?: Error) => {
           workerStopped.then(
             () => callback?.(error),
