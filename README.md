@@ -163,6 +163,7 @@ Working example (offline-first POS over a plain Hono REST API):
 - [`rfcs/rfc-local-sync-convergence.md`](./rfcs/rfc-local-sync-convergence.md) — the convergence protocol.
 - [`rfcs/rfc-production-readiness.md`](./rfcs/rfc-production-readiness.md) — the path from pilot-proven to a production release.
 - [`rfcs/rfc-redis-streams-realtime.md`](./rfcs/rfc-redis-streams-realtime.md) — proposed pooler-agnostic realtime adapter (post-1.0).
+- [`rfcs/rfc-framework-free-core.md`](./rfcs/rfc-framework-free-core.md) — proposed `@nizhal/server/core` (Hono becomes one binding; post-1.0).
 
 ## License
 
