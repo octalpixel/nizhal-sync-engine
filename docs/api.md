@@ -196,6 +196,13 @@ store.pullNow();                                  // pull-to-refresh
 Also on the store: `ready()`, `waitForIdle()`, `getPendingCount()`, `deadLetter` +
 `retryDeadLetter()` + `onDeadLetterChange()`, `dispose()`.
 
+**Identity + reset.** The store persists the derived-schema shape and the `actor` identity in
+`nizhal_meta`. On open it reconciles both before syncing: an additive schema change migrates in place,
+a breaking one drops+recreates the tables and re-hydrates (T17), and **a different `actor` (shared
+device / re-login) fully re-bootstraps for the new user** — the previous user's rows, cursor, and
+un-flushed outbox are cleared so nothing leaks across identities or flushes under the wrong auth.
+(An app that must not drop a logged-out user's pending writes should flush before switching users.)
+
 ### `createNizhalClient`
 
 ```ts

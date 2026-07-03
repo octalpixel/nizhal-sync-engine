@@ -21,7 +21,7 @@ import type { MutationIdStorage } from "../mutation-id.js";
 import type { OnlineDetector } from "../types.js";
 import type { NizhalMutatorDefinition, NizhalPoisonEntry } from "../types.js";
 import { type WriteGate, createWriteGate } from "./atomic.js";
-import { CONTROL_TABLE_DDL, nizhalMeta, nizhalOutbox } from "./control-schema.js";
+import { CONTROL_TABLE_DDL, nizhalDeadLetter, nizhalMeta, nizhalOutbox } from "./control-schema.js";
 import { type NizhalMetaStore, createDeadLetterStore, createMetaStore } from "./meta.js";
 import { createDrizzleClientMutatorCtx } from "./mutator-tx.js";
 import { type PullLoop, createPullLoop } from "./pull.js";
@@ -203,6 +203,38 @@ async function migrateDerivedSchema(
   return { reset: false };
 }
 
+// A checkpoint (cursor) and its local data are separate state: if a DIFFERENT actor opens a store a
+// previous user already synced (shared device / re-login), reusing the old cursor would leak the old
+// user's rows and skip the new user's history — the sync would report "idle" while lying. Detect the
+// identity change and fully re-bootstrap for the new user. The previous user's un-flushed outbox +
+// dead-letter are cleared: they must NOT flush under the new user's auth (wrong attribution). An app
+// that must not drop a logged-out user's pending writes should flush before switching users.
+const ACTOR_IDENTITY_KEY = "actor-identity";
+async function reconcileActorIdentity(
+  db: AnyDrizzleSqliteDb,
+  tables: SQLiteTable[],
+  meta: NizhalMetaStore,
+  actor: Actor,
+): Promise<void> {
+  const identity = `${actor.ownerId} ${actor.userId}`;
+  const stored = await meta.get(ACTOR_IDENTITY_KEY);
+  if (stored !== null && stored !== identity) {
+    for (const table of tables) {
+      await db.run(sql.raw(`DROP TABLE IF EXISTS "${getTableName(table)}"`));
+      await db.run(sql.raw(tableDdl(table)));
+    }
+    await db
+      .delete(nizhalMeta)
+      .where(sql`${nizhalMeta.key} like 'cursor:%' or ${nizhalMeta.key} like 'epoch:%'`);
+    await db.delete(nizhalOutbox);
+    await db.delete(nizhalDeadLetter);
+    // Re-stamp the derived-schema fingerprint (tables were just recreated at the current shape) so the
+    // subsequent on-device migration is a no-op.
+    await meta.set(DERIVED_SCHEMA_KEY, JSON.stringify(derivedFingerprint(tables)));
+  }
+  await meta.set(ACTOR_IDENTITY_KEY, identity);
+}
+
 /**
  * The drizzle-native sync client (rfc-drizzle-native-sync-client): ONE SQLite file holding the
  * derived real tables + the outbox/meta/dead-letter control tables, so optimistic apply + enqueue
@@ -270,6 +302,10 @@ export async function openNizhalStore<
 
   const gate = createWriteGate();
   const meta = createMetaStore(db);
+  // Actor-identity guard: a different user on the same store re-bootstraps for the new identity (the
+  // shared-device / re-login "checkpoints lie" case) — runs first, so a same-user schema change below
+  // still migrates in place.
+  await reconcileActorIdentity(db, Object.values(byName) as SQLiteTable[], meta, opts.actor);
   // On-device schema migration (T17): reconcile the derived tables with the last-seen shape before the
   // pull loop starts — additive columns in place, a breaking change via drop-recreate + cursor reset.
   const migration = await migrateDerivedSchema(db, Object.values(byName) as SQLiteTable[], meta);
