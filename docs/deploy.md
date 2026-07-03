@@ -45,6 +45,11 @@ alone are fine through a pooler; only `LISTEN/NOTIFY` needs the direct connectio
 | `listenNotifyRealtime` | **The production default.** Cross-instance via Postgres `LISTEN/NOTIFY`. Needs a direct connection (above). Its `NOTIFY` triggers are installed by `provisionRealtime()` — a base `nizhal migrate` does not add them, so without provisioning a server would `LISTEN` but never receive, and realtime would be silently dead. |
 | `cloudflareRealtime` | **Edge/serverless topology.** Realtime lives in a stateful Cloudflare Worker Durable Object next to a stateless data plane. This is a *realtime adapter*, not "a Cloudflare server" — the sync server is still the Hono app; only the poke fan-out moves to the Worker. |
 
+If your platform only exposes a **transaction-mode pooler** (Supabase/Neon pooled, PgBouncer
+`transaction`), `listenNotifyRealtime`'s `LISTEN` will not survive it — a `redisStreamsRealtime`
+adapter for that case is proposed in [`rfc-redis-streams-realtime.md`](../rfcs/rfc-redis-streams-realtime.md)
+(post-1.0). Until then, give the server a direct connection or use `cloudflareRealtime`.
+
 The poke is only ever a hint (`repull:<bucket>`); the client's cursor pull is authoritative, so a
 missed or duplicated poke self-heals on the next pull. This is why a dropped socket is not data loss.
 
@@ -66,6 +71,56 @@ upgrade request); everywhere else it is the `Authorization` header.
 
 `ownerId` is the tenant boundary — sync rules scope every bucket by it, so a correct `resolve()` is
 what keeps one tenant's rows out of another's pull. Treat it as security-critical, not plumbing.
+
+## Server-authoritative writes from webhooks
+
+External services (GitHub, Slack, Stripe, your own backend) often need to write into a synced table —
+a Stripe `payment_succeeded` flipping an order's status, a GitHub push appending an activity row. Do
+**not** reach into storage directly. Drive the *same* `/sync/push` pipeline a client uses, in-process
+via `app.fetch` (no network hop): the mutator runs in a transaction, its outbox jobs enqueue
+atomically, and subscribers get poked — for free, through one code path.
+
+```ts
+import { issueBearerToken } from "@nizhal/server";
+import server from "./api/server.mjs"; // the same Hono app (server.app)
+
+export default async function githubWebhook(req, res) {
+  // 1. VERIFY the provider signature FIRST. A webhook URL is a public, unauthenticated endpoint;
+  //    an unverified body is attacker-controlled. (GitHub HMAC-SHA256 / Stripe-Signature / Slack v0.)
+  const event = await verifyAndParse(req); // throws on a bad signature — your provider's check
+
+  // 2. Map the event to a tenant (ownerId) and mint a short-lived token for a service actor.
+  const ownerId = event.repository.owner.login;
+  const token = issueBearerToken({ userId: "svc:github", ownerId, secret: process.env.JWT_SECRET });
+
+  // 3. Push through app.fetch. Note the mutation is UNSEQUENCED — it carries a clientMutationId but
+  //    no clientID/mutationID. clientMutationId is the idempotency key: providers deliver
+  //    at-least-once, and a redelivery with the same key is deduped (claimMutation), applied exactly
+  //    once. Omitting the sequence fields is correct here — each webhook event is independent, so it
+  //    must NOT be held to a per-client monotonic order (that constraint is for a device's outbox).
+  const push = await server.app.fetch(
+    new Request("http://internal/sync/push", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        mutations: [
+          {
+            name: "recordActivity",
+            args: { id: event.id, text: event.title },
+            clientMutationId: `github:${event.deliveryId}`, // stable per event → redelivery-safe
+          },
+        ],
+      }),
+    }),
+  );
+  res.statusCode = push.status;
+  res.end(await push.text());
+}
+```
+
+On a long-running host the push emits a realtime poke immediately; on serverless it still commits the
+write + outbox job atomically, and connected clients converge on the poke or their next pull. Either
+way the webhook has done exactly one thing — called a mutator — and inherited the whole engine.
 
 ## The reference deploy
 
