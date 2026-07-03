@@ -71,7 +71,8 @@ export const syncRules = defineSyncRules((b) => ({
 
 ## `@nizhal/server`
 
-Hono sync server, storage, realtime, auth, jobs, and observability.
+Hono sync server, storage, realtime, auth, jobs, and observability. For hosting it — container /
+serverless / edge, with the realtime and auth choice per class — see [`deploy.md`](./deploy.md).
 
 ### `createNizhalServer`
 

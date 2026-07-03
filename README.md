@@ -156,6 +156,7 @@ Working example (offline-first POS over a plain Hono REST API):
 - [`docs/when-to-use-nizhal.md`](./docs/when-to-use-nizhal.md) — the honest adoption gate.
 - [`docs/local.md`](./docs/local.md) — the local-only (`@nizhal/local`) guide.
 - [`docs/platforms.md`](./docs/platforms.md) — platform/bundler recipes (Expo native & web, Vite, Next.js, TanStack Start).
+- [`docs/deploy.md`](./docs/deploy.md) — hosting the sync server: container / serverless / edge, realtime & auth per class.
 - [`docs/schema-evolution.md`](./docs/schema-evolution.md) — evolving a synced schema safely across an un-updatable fleet.
 - [`docs/local-sync-architecture.md`](./docs/local-sync-architecture.md) — how convergence works under the hood.
 - [`rfcs/rfc-drizzle-native-sync-client.md`](./rfcs/rfc-drizzle-native-sync-client.md) — the store's design.
