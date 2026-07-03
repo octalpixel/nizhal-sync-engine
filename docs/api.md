@@ -162,6 +162,22 @@ Hooks: `onPull`, `onPush`, `onConflict`, `onError`. `gatherStats(db, realtime)` 
 
 `createJobScheduler` + `createJobWorker` for durable background tasks enqueued from mutators.
 
+### Publishing to external systems — use the jobs outbox, never a post-commit publish
+
+Writing to Postgres **and** publishing to a separate system (Kafka, a webhook, a cross-region bus, an
+external metrics/observability sink) are two I/O operations that are **not atomic** — a crash or an
+outage between the DB commit and the publish silently loses the event (the transactional-outbox /
+dual-write problem). Do **not** `await publish(...)` after a mutation commits. Instead **enqueue a job
+inside the mutator's transaction** (`ctx.jobs`) — the job row commits atomically with the business
+write, and the durable job worker relays it to the external system with retry + backoff (an
+at-least-once transactional outbox; the external consumer dedupes on the mutation/event id).
+
+This applies **only to external consumers**. Nizhal's own realtime notification is exempt: the
+`inProcessRealtime` poke is a deliberately best-effort post-commit hint, and `listenNotifyRealtime`
+sends its `pg_notify` from a DB trigger (transactional). Both are safe because the **client's cursor
+pull is authoritative** — a dropped poke self-heals on the next catch-up pull. An external system has
+no such fallback, so it must go through the jobs outbox.
+
 ---
 
 ## `@nizhal/db-collection`
