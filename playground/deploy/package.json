@@ -1,0 +1,16 @@
+{
+  "name": "nizhal-deploy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node node-server.mjs",
+    "start:bun": "bun run bun-server.mjs",
+    "check-types": "true"
+  },
+  "dependencies": {
+    "@nizhal/kernel": "workspace:*",
+    "@nizhal/server": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.27"
+  }
+}

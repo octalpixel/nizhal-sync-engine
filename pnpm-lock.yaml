@@ -303,6 +303,21 @@ importers:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
 
+  playground/deploy:
+    dependencies:
+      '@nizhal/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+      '@nizhal/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@cloudflare/workers-types@4.20260625.1)(@electric-sql/pglite@0.5.3)(@libsql/client@0.17.4)(@op-engineering/op-sqlite@17.0.0(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(postgres@3.4.9)
+      hono:
+        specifier: ^4.12.27
+        version: 4.12.27
+
   playground/local-notes:
     dependencies:
       '@nizhal/local':

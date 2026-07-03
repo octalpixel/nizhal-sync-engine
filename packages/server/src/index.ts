@@ -31,6 +31,7 @@ import { getTableName } from "drizzle-orm/table";
 import { getTableColumns } from "drizzle-orm/utils";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type { UpgradeWebSocket } from "hono/ws";
 import * as Y from "yjs";
 import { type BlobAdapter, type LocalFsBlobStore, blobDb, findBlobRef } from "./adapters/blob.js";
 import {
@@ -125,11 +126,53 @@ export interface NizhalServerConfig {
    * fleet-safety valve for shipping a breaking schema change (bump this in the second release).
    */
   minClientVersion?: string;
+  /**
+   * Runtime WebSocket adapter factory for `/sync/stream`. Defaults to `@hono/node-ws` (Node). Pass
+   * `(app) => createBunWebSocket()` on Bun, or a Deno/Workers adapter — the HTTP plane (`app.fetch`)
+   * already runs on any runtime; this makes realtime portable too.
+   */
+  createWebSocket?: NizhalWebSocketFactory;
 }
 
+/**
+ * A runtime's WebSocket integration for Hono. Node passes `createNodeWebSocket({ app })`; Bun passes
+ * `createBunWebSocket()` (its `websocket` handler goes to `Bun.serve`); Deno/Workers each have their
+ * own. Only `upgradeWebSocket` is required — it builds the `/sync/stream` route; the rest is how the
+ * host attaches the socket (`injectWebSocket` for a Node http server, `websocket` for `Bun.serve`).
+ */
+export interface NizhalWebSocketAdapter {
+  upgradeWebSocket: UpgradeWebSocket;
+  injectWebSocket?: (server: ReturnType<typeof serve>) => void;
+  /** Bun/other runtimes: the websocket handler to hand to `Bun.serve({ websocket })`. */
+  websocket?: unknown;
+}
+/** Build the WebSocket adapter for the current runtime. Default: `@hono/node-ws`. */
+export type NizhalWebSocketFactory = (app: Hono<any>) => NizhalWebSocketAdapter;
+
 export interface NizhalServer {
+  /** The Hono app — its `.fetch` handler is the platform-agnostic entrypoint (edge, serverless, any
+   *  fetch-based host). Realtime rides `/sync/stream` over WebSocket via {@link injectWebSocket}. */
   app: Hono<any>;
+  /** The runtime WebSocket adapter (default Node). Bun entrypoints read `.websocket` for `Bun.serve`. */
+  webSocket: NizhalWebSocketAdapter;
+  /** Bind a long-running Node process (containers: Docker/Fly/Railway/Render/AWS/SST, or bare Node).
+   *  Installs the realtime notify triggers + attaches the WebSocket upgrade handler for you. */
   listen(port: number): ReturnType<typeof serve>;
+  /** Attach the `/sync/stream` WebSocket upgrade handler onto an http server you own — for serverless
+   *  entrypoints that must `export default` their own server (e.g. Vercel:
+   *  `const s = serve({ fetch: app.fetch }); injectWebSocket(s); export default s`). On these hosts you
+   *  are also responsible for calling `provisionRealtime()` (which `listen()` does automatically). */
+  injectWebSocket(server: ReturnType<typeof serve>): void;
+  /** Install the realtime adapter's DDL (listenNotifyRealtime's pg_notify triggers). Idempotent.
+   *  `listen()` calls this for you; serverless entrypoints should call it once at cold start. */
+  provisionRealtime(): Promise<void>;
+  /**
+   * Drain due background jobs once (tombstone GC + any mutator-enqueued jobs) and return how many ran.
+   * A long-running host runs this automatically via a poll loop started in `listen()`. **Serverless has
+   * no persistent process, so nothing drains the outbox there** — call this from a scheduled function
+   * (Vercel Cron / Lambda schedule) so tombstone GC and enqueued jobs actually run.
+   */
+  runJobsOnce(): Promise<number>;
 }
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -255,7 +298,11 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
   const app = new Hono<{
     Variables: { actor: Actor; buckets: BucketKey[]; streamAuthRequest: Request };
   }>();
-  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+  const webSocket: NizhalWebSocketAdapter = (
+    config.createWebSocket ?? ((a) => createNodeWebSocket({ app: a }))
+  )(app);
+  const { upgradeWebSocket } = webSocket;
+  const injectWebSocket = webSocket.injectWebSocket ?? (() => {});
   // CORS must be the first middleware so it wraps every route (and preflight). Off by default;
   // enable for browser clients on a different origin (e.g. an Expo web app hitting the API).
   if (config.cors) {
@@ -681,22 +728,38 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
       };
     }),
   );
+  // Install the realtime adapter's own DDL — listenNotifyRealtime's pg_notify triggers. Without this
+  // the adapter LISTENs but nothing ever NOTIFYs, so realtime is silently dead (clients only converge
+  // via the interval pull). Idempotent (create-or-replace / drop-if-exists). listen() calls it;
+  // serverless entrypoints call it once at cold start.
+  async function provisionRealtime(): Promise<void> {
+    try {
+      await realtime.provision?.({ schema: config.schema, syncRules: config.syncRules });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[@nizhal/server] realtime.provision failed — notify triggers may be missing, so realtime pokes will not fire (clients still converge via interval pull): ${detail}`,
+      );
+    }
+  }
   return {
     app,
+    webSocket,
+    injectWebSocket,
+    provisionRealtime,
+    async runJobsOnce() {
+      // Ensure the recurring GC job is queued (listen() seeds it; serverless never calls listen()),
+      // then drain everything currently due. Returns the number of jobs run.
+      if (gcDb) await seedTombstoneGc(gcDb, DEFAULT_TOMBSTONE_GC_INTERVAL_MS);
+      if (!jobWorker) return 0;
+      let ran = 0;
+      while ((await jobWorker.runOnce()) === 1) ran += 1;
+      return ran;
+    },
     listen(port) {
       jobWorker?.start();
       if (gcDb) void seedTombstoneGc(gcDb, DEFAULT_TOMBSTONE_GC_INTERVAL_MS);
-      // Install the realtime adapter's own DDL — listenNotifyRealtime's pg_notify triggers. Without
-      // this the adapter LISTENs but nothing ever NOTIFYs, so realtime is silently dead (clients only
-      // converge via the interval pull). Idempotent (create-or-replace / drop-if-exists) + best-effort.
-      void realtime
-        .provision?.({ schema: config.schema, syncRules: config.syncRules })
-        .catch((error: unknown) => {
-          const detail = error instanceof Error ? error.message : String(error);
-          console.warn(
-            `[@nizhal/server] realtime.provision failed — notify triggers may be missing, so realtime pokes will not fire (clients still converge via interval pull): ${detail}`,
-          );
-        });
+      void provisionRealtime();
       const server = serve({ fetch: app.fetch, port });
       injectWebSocket(server);
       const close = server.close.bind(server);
