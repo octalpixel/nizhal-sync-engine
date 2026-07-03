@@ -127,9 +127,9 @@ const storage = postgresStorage({ connectionString: process.env.DATABASE_URL! })
 
 | Adapter | Import | Use case |
 |---------|--------|----------|
-| `inProcessRealtime` | `@nizhal/server/adapters` | Default single-process pub/sub from commit chokepoint |
-| `listenNotifyRealtime` | `@nizhal/server/adapters` | Multi-instance Postgres via `LISTEN/NOTIFY` |
-| `cloudflareRealtime` | `@nizhal/server/adapters/cloudflare` | Cloudflare Workers + Durable Objects (PartyServer) |
+| `inProcessRealtime` | `@nizhal/server/adapters` | **Dev/test only** — single-process in-memory pub/sub; does NOT cross instances, so it is an antipattern in production (see [platforms.md](./platforms.md#deploying-realtime-on-serverless--multi-instance-vercel-etc)) |
+| `listenNotifyRealtime` | `@nizhal/server/adapters` | Production multi-instance via Postgres `LISTEN/NOTIFY` — needs a **direct** (session-mode) connection, not a transaction pooler |
+| `cloudflareRealtime` | `@nizhal/server/adapters/cloudflare` | Production edge/serverless — realtime in a Cloudflare Worker Durable Object (PartyServer) |
 
 All implement `RealtimeAdapter`: `publish(bucket)` (commit chokepoint only) + `subscribe(onPing)`.
 

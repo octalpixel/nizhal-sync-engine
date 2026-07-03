@@ -119,12 +119,13 @@ is exactly `createWebSocketSource`'s reconnect + catch-up-pull, and the poke is 
 pull is authoritative), so a dropped socket self-heals. The server is a standard `@hono/node-server`
 WS app, which Vercel supports directly.
 
-**The trap:** the default **`inProcessRealtime` does not work across instances.** It is an in-memory,
-per-process registry — a poke published by the instance that handled the *write* never reaches a socket
-held by a *different* instance. On a single warm dev instance it appears to work; under real
-multi-instance scale (Vercel, any horizontally-scaled deploy) sockets on other instances silently miss
-every poke. (They still converge via the interval pull, but you've lost realtime.) So on serverless /
-multi-instance, pick a cross-instance adapter:
+**`inProcessRealtime` is a dev/test default only — an antipattern in production.** It is an in-memory,
+per-process registry: a poke published by the instance that handled the *write* never reaches a socket
+held by a *different* instance. On a single warm dev instance it appears to work; the moment you scale
+past one instance — which every production deploy does (Vercel, Fly, k8s, any autoscaler) — sockets on
+other instances silently miss every poke. (They still converge via the interval pull, so it fails
+*quietly* — the worst kind.) The server logs a warning if it is left as the default when
+`NODE_ENV=production`. **Production must use a cross-instance adapter:**
 
 - **`listenNotifyRealtime`** — cross-instance via Postgres `LISTEN/NOTIFY`. Requirement: it holds a
   persistent `LISTEN` connection, which **does not survive a transaction-mode pooler** (PgBouncer,

@@ -206,6 +206,17 @@ export function createNizhalServer(config: NizhalServerConfig): NizhalServer {
   const realtime =
     config.realtime ??
     inProcessRealtime({ heartbeatTimeoutMs: config.presence?.heartbeatTimeoutMs });
+  // inProcessRealtime is a dev/test default only — in-memory per-process pub/sub that does NOT cross
+  // instances, so a production multi-instance deploy silently loses realtime (clients still converge
+  // via interval pull). Warn if it was left defaulted in production. See docs/platforms.md.
+  if (config.realtime === undefined && globalThis.process?.env?.NODE_ENV === "production") {
+    console.warn(
+      "[@nizhal/server] realtime is the default inProcessRealtime — single-process in-memory pub/sub " +
+        "that does NOT cross instances. In a multi-instance production deploy, sockets on other " +
+        "instances miss every poke. Use listenNotifyRealtime (direct Postgres connection) or " +
+        "cloudflareRealtime. See docs/platforms.md.",
+    );
+  }
   const observer = safeObserver(config.observer ?? noopObserver);
   const blob = config.blob;
   // Built-in tombstone GC (D4): a self-perpetuating job that prunes aged tombstones + advances the
