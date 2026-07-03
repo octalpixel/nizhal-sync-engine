@@ -8,6 +8,7 @@
     "check-types": "true"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.14",
     "@nizhal/kernel": "workspace:*",
     "@nizhal/server": "workspace:*",
     "drizzle-orm": "^0.45.2",

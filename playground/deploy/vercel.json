@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm --filter @nizhal/kernel --filter @nizhal/server build",
+  "functions": { "api/*.mjs": { "maxDuration": 60 } },
+  "rewrites": [
+    { "source": "/sync/(.*)", "destination": "/api/server" },
+    { "source": "/nizhal/(.*)", "destination": "/api/server" }
+  ],
+  "crons": [{ "path": "/api/drain", "schedule": "0 3 * * *" }]
+}

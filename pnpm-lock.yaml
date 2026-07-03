@@ -305,6 +305,9 @@ importers:
 
   playground/deploy:
     dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.14
+        version: 1.19.14(hono@4.12.27)
       '@nizhal/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
