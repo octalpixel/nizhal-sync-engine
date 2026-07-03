@@ -11,6 +11,11 @@ import { orders, posMutators, posSyncRules, products } from "./domain.js";
 const SERVER = "http://127.0.0.1:4600";
 const schema = { products, orders };
 
+// Which user/shop is logged in on this device — a URL param so a "re-login" is just a reload onto the
+// SAME on-device SQLite (IndexedDB persists). Nizhal's actor-identity guard then re-bootstraps for the
+// new user, so the previous user's rows + un-flushed outbox never leak (the "checkpoints lie" class).
+const shop = new URLSearchParams(location.search).get("shop") ?? "shop-1";
+
 async function boot() {
   // browser SQLite (docs/platforms.md — Vite recipe)
   const sqliteModule = await SQLiteESMFactory({ locateFile: () => wasmUrl });
@@ -27,7 +32,7 @@ async function boot() {
   const onlineDetector = manualOnlineDetector();
   const echo = createNizhalClient({
     syncTarget: restSyncTarget(SERVER),
-    bucketsForSyncRule: () => ["shop-1"],
+    bucketsForSyncRule: () => [shop],
     pull: { intervalMs: 2000 }, // no websocket on the existing API → interval pull
   });
   const store = await openNizhalStore({
@@ -35,7 +40,7 @@ async function boot() {
     schema,
     syncRules: posSyncRules,
     mutators: posMutators,
-    actor: { userId: "till-1", ownerId: "shop-1" },
+    actor: { userId: `till-${shop}`, ownerId: shop },
     database: waSqliteDrizzle({ sqlite3, database, config: { schema } }),
     changes: waSqliteChanges(sqlite3, database),
     crossTabChannel: "pos", // multi-tab: sibling tabs' watchers re-run when this tab writes
@@ -48,7 +53,18 @@ async function boot() {
     products: document.querySelector("#products") as HTMLUListElement,
     orders: document.querySelector("#orders") as HTMLParagraphElement,
     toggle: document.querySelector("#toggle") as HTMLButtonElement,
+    who: document.querySelector("#who") as HTMLElement,
+    loginA: document.querySelector("#login-a") as HTMLButtonElement,
+    loginB: document.querySelector("#login-b") as HTMLButtonElement,
   };
+  el.who.textContent = shop;
+  // "Re-login" = reload with the other shop on the SAME device store (IndexedDB persists).
+  el.loginA.addEventListener("click", () => {
+    location.search = "?shop=shop-1";
+  });
+  el.loginB.addEventListener("click", () => {
+    location.search = "?shop=shop-2";
+  });
 
   let online = true;
   el.toggle.addEventListener("click", () => {
