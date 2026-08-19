@@ -8,6 +8,9 @@ lock-in. It provisions plain columns + triggers on any Postgres you already run.
 > **Code name "Nizhal"** — the shadow/echo of your data: keeping every replica in agreement is
 > echoing each change across all of them. (Codename; swappable.)
 
+**📖 Documentation: [nizhal-docs.mithushancj.workers.dev](https://nizhal-docs.mithushancj.workers.dev)** —
+start with the [Quickstart](https://nizhal-docs.mithushancj.workers.dev/getting-started/quickstart/).
+
 ## The thesis
 
 The hard, reusable 80% of offline-first — a local SQLite store, a durable outbox, convergence,
@@ -151,6 +154,15 @@ Working example (offline-first POS over a plain Hono REST API):
 | [`@nizhal/cli`](./packages/cli) | `nizhal migrate` — provisions the no-WAL DDL onto your existing tables. |
 
 ## Docs
+
+Live site: **[nizhal-docs.mithushancj.workers.dev](https://nizhal-docs.mithushancj.workers.dev)** —
+[Quickstart](https://nizhal-docs.mithushancj.workers.dev/getting-started/quickstart/) ·
+[How sync works](https://nizhal-docs.mithushancj.workers.dev/concepts/how-sync-works/) ·
+[API reference](https://nizhal-docs.mithushancj.workers.dev/reference/api/) ·
+[Self-hosting](https://nizhal-docs.mithushancj.workers.dev/self-hosting/node/) ·
+[Compare](https://nizhal-docs.mithushancj.workers.dev/compare/)
+
+In-repo deep dives:
 
 - [`docs/api.md`](./docs/api.md) — full public API reference for all five packages.
 - [`docs/when-to-use-nizhal.md`](./docs/when-to-use-nizhal.md) — the honest adoption gate.
