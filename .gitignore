@@ -9,6 +9,8 @@ dist/
 coverage/
 *.log
 *.db
+*.db-shm
+*.db-wal
 .handoff/
 *-scratchpad.md
 *-implementation-notes.md
@@ -18,10 +20,12 @@ coverage/
 .wrangler/
 **/.wrangler/
 .dev.vars
-.agents/
+.agents/generated-images/
 
 # vendored third-party sync-engine clones used for research comparison (not our code — do not commit)
 research/lunora/
 research/replicache/
 research/zero-mono/
 apps/tabkeep-expo/dist-web/
+.plandesk/token
+.plandesk/server.json

@@ -1,0 +1,1 @@
+../../../.agents/skills/plandesk-prototype/SKILL.md
